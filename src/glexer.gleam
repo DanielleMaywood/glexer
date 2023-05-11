@@ -140,6 +140,9 @@ pub fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
     [">", ..] -> #(advance(lexer, by: 1), token(lexer, token.Greater))
     ["%", ..] -> #(advance(lexer, by: 1), token(lexer, token.Percent))
 
+    // Strings
+    ["\"", ..rest] -> lex_string(rest, [], lexer.position)
+
     // Keywords & Literals
     //
     // TODO (@DanielleMaywood):
@@ -222,4 +225,30 @@ fn advance(lexer: Lexer, by offset: Int) -> Lexer {
 
 fn token(lexer: Lexer, token: Token) -> #(Token, Position) {
   #(token, Position(lexer.position))
+}
+
+fn lex_string(
+  input: List(String),
+  content: List(String),
+  start: Int,
+) -> #(Lexer, #(Token, Position)) {
+  case input {
+    [] -> panic
+
+    ["\"", ..rest] -> {
+      let content = reverse_concat(content, "")
+      // This should use string.byte_size, but that function does not exist yet.
+      let lexer = Lexer(rest, start + string.length(content) + 2)
+      #(lexer, #(token.String(content), Position(start)))
+    }
+
+    [g, ..rest] -> lex_string(rest, [g, ..content], start)
+  }
+}
+
+fn reverse_concat(list: List(String), acc: String) -> String {
+  case list {
+    [grapheme, ..rest] -> reverse_concat(rest, acc <> grapheme)
+    [] -> acc
+  }
 }

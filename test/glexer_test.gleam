@@ -201,3 +201,13 @@ pub fn sub(lhs: Int, rhs: Int) -> Int {
     #(token.EndOfFile, Position(93)),
   ])
 }
+
+pub fn empty_test() {
+  "\"\""
+  |> glexer.new()
+  |> glexer.lex()
+  |> should.equal([
+    #(token.String(""), Position(0)),
+    #(token.EndOfFile, Position(2)),
+  ])
+}
