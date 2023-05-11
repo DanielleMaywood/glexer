@@ -202,12 +202,42 @@ pub fn sub(lhs: Int, rhs: Int) -> Int {
   ])
 }
 
-pub fn empty_test() {
+pub fn string_empty_test() {
   "\"\""
   |> glexer.new()
   |> glexer.lex()
   |> should.equal([
     #(token.String(""), Position(0)),
     #(token.EndOfFile, Position(2)),
+  ])
+}
+
+pub fn string_hello_joe_test() {
+  "\"Hello, Joe!\""
+  |> glexer.new()
+  |> glexer.lex()
+  |> should.equal([
+    #(token.String("Hello, Joe!"), Position(0)),
+    #(token.EndOfFile, Position(13)),
+  ])
+}
+
+pub fn string_multiline_test() {
+  "\"One\nTwo\nThree\""
+  |> glexer.new()
+  |> glexer.lex()
+  |> should.equal([
+    #(token.String("One\nTwo\nThree"), Position(0)),
+    #(token.EndOfFile, Position(15)),
+  ])
+}
+
+pub fn string_unterminated_test() {
+  "\"No closing quote"
+  |> glexer.new()
+  |> glexer.lex()
+  |> should.equal([
+    #(token.UnterminatedString("No closing quote"), Position(0)),
+    #(token.EndOfFile, Position(17)),
   ])
 }

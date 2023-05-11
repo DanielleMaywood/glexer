@@ -81,4 +81,7 @@ pub type Token {
   CommentNormal
   CommentModule
   EmptyLine
+
+  // Invalid code tokens
+  UnterminatedString(String)
 }
