@@ -241,3 +241,23 @@ pub fn string_unterminated_test() {
     #(token.EndOfFile, Position(17)),
   ])
 }
+
+pub fn string_escaped_quote_test() {
+  "\" \\\" \""
+  |> glexer.new()
+  |> glexer.lex()
+  |> should.equal([
+    #(token.String(" \\\" "), Position(0)),
+    #(token.EndOfFile, Position(6)),
+  ])
+}
+
+pub fn string_newline_escape_code_test() {
+  "\" \\n \""
+  |> glexer.new()
+  |> glexer.lex()
+  |> should.equal([
+    #(token.String(" \\n "), Position(0)),
+    #(token.EndOfFile, Position(6)),
+  ])
+}

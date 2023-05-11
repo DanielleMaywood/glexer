@@ -233,18 +233,24 @@ fn lex_string(
   start: Int,
 ) -> #(Lexer, #(Token, Position)) {
   case input {
+    // End of input, the string is unterminated
     [] -> {
       // This should use string.byte_size, but that function does not exist yet.
       let lexer = Lexer([], start + string.length(content) + 1)
       #(lexer, #(token.UnterminatedString(content), Position(start)))
     }
 
+    // A double quote, the string is terminated
     ["\"", ..rest] -> {
       // This should use string.byte_size, but that function does not exist yet.
       let lexer = Lexer(rest, start + string.length(content) + 2)
       #(lexer, #(token.String(content), Position(start)))
     }
 
+    // A backslash escapes the following character
+    ["\\" as g1, g2, ..rest] -> lex_string(rest, content <> g1 <> g2, start)
+
+    // Any other character is content in the string
     [g, ..rest] -> lex_string(rest, content <> g, start)
   }
 }
