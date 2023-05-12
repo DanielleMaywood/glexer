@@ -18,7 +18,6 @@ pub fn can_lex_groupings_test() {
     #(token.RightBrace, Position(6)),
     #(token.LeftSquare, Position(8)),
     #(token.RightSquare, Position(10)),
-    #(token.EndOfFile, Position(11)),
   ])
 }
 
@@ -36,7 +35,6 @@ pub fn can_lex_int_operators_test() {
     #(token.LessEqual, Position(12)),
     #(token.GreaterEqual, Position(15)),
     #(token.Percent, Position(18)),
-    #(token.EndOfFile, Position(19)),
   ])
 }
 
@@ -53,7 +51,6 @@ pub fn can_lex_float_operators_test() {
     #(token.GreaterDot, Position(15)),
     #(token.LessEqualDot, Position(18)),
     #(token.GreaterEqualDot, Position(22)),
-    #(token.EndOfFile, Position(25)),
   ])
 }
 
@@ -61,10 +58,7 @@ pub fn can_lex_string_operators_test() {
   "<>"
   |> glexer.new()
   |> glexer.lex()
-  |> should.equal([
-    #(token.LessGreater, Position(0)),
-    #(token.EndOfFile, Position(2)),
-  ])
+  |> should.equal([#(token.LessGreater, Position(0))])
 }
 
 pub fn can_lex_other_punctuation_test() {
@@ -89,7 +83,6 @@ pub fn can_lex_other_punctuation_test() {
     #(token.DotDot, Position(35)),
     #(token.RightArrow, Position(38)),
     #(token.LeftArrow, Position(41)),
-    #(token.EndOfFile, Position(43)),
   ])
 }
 
@@ -113,7 +106,6 @@ pub fn can_lex_keywords_test() {
     #(token.Todo, Position(64)),
     #(token.Type, Position(69)),
     #(token.Use, Position(74)),
-    #(token.EndOfFile, Position(77)),
   ])
 }
 
@@ -131,7 +123,6 @@ pub fn can_lex_empty_lines_test() {
     #(token.Dot, Position(11)),
     #(token.EmptyLine, Position(12)),
     #(token.EmptyLine, Position(17)),
-    #(token.EndOfFile, Position(22)),
   ])
 }
 
@@ -147,7 +138,6 @@ pub fn can_lex_comments_test() {
     #(token.CommentDoc(" This is a doc comment"), Position(33)),
     #(token.CommentNormal, Position(62)),
     #(token.EmptyLine, Position(82)),
-    #(token.EndOfFile, Position(85)),
   ])
 }
 
@@ -198,7 +188,6 @@ pub fn sub(lhs: Int, rhs: Int) -> Int {
     #(token.Name("rhs"), Position(87)),
     #(token.RightBrace, Position(91)),
     #(token.EmptyLine, Position(92)),
-    #(token.EndOfFile, Position(93)),
   ])
 }
 
@@ -206,58 +195,40 @@ pub fn string_empty_test() {
   "\"\""
   |> glexer.new()
   |> glexer.lex()
-  |> should.equal([
-    #(token.String(""), Position(0)),
-    #(token.EndOfFile, Position(2)),
-  ])
+  |> should.equal([#(token.String(""), Position(0))])
 }
 
 pub fn string_hello_joe_test() {
   "\"Hello, Joe!\""
   |> glexer.new()
   |> glexer.lex()
-  |> should.equal([
-    #(token.String("Hello, Joe!"), Position(0)),
-    #(token.EndOfFile, Position(13)),
-  ])
+  |> should.equal([#(token.String("Hello, Joe!"), Position(0))])
 }
 
 pub fn string_multiline_test() {
   "\"One\nTwo\nThree\""
   |> glexer.new()
   |> glexer.lex()
-  |> should.equal([
-    #(token.String("One\nTwo\nThree"), Position(0)),
-    #(token.EndOfFile, Position(15)),
-  ])
+  |> should.equal([#(token.String("One\nTwo\nThree"), Position(0))])
 }
 
 pub fn string_unterminated_test() {
   "\"No closing quote"
   |> glexer.new()
   |> glexer.lex()
-  |> should.equal([
-    #(token.UnterminatedString("No closing quote"), Position(0)),
-    #(token.EndOfFile, Position(17)),
-  ])
+  |> should.equal([#(token.UnterminatedString("No closing quote"), Position(0))])
 }
 
 pub fn string_escaped_quote_test() {
   "\" \\\" \""
   |> glexer.new()
   |> glexer.lex()
-  |> should.equal([
-    #(token.String(" \\\" "), Position(0)),
-    #(token.EndOfFile, Position(6)),
-  ])
+  |> should.equal([#(token.String(" \\\" "), Position(0))])
 }
 
 pub fn string_newline_escape_code_test() {
   "\" \\n \""
   |> glexer.new()
   |> glexer.lex()
-  |> should.equal([
-    #(token.String(" \\n "), Position(0)),
-    #(token.EndOfFile, Position(6)),
-  ])
+  |> should.equal([#(token.String(" \\n "), Position(0))])
 }

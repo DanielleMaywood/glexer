@@ -1,5 +1,6 @@
 import glexer/internal/predicates
 import glexer/token.{Token}
+import gleam/iterator.{Iterator}
 import gleam/string_builder
 import gleam/string
 import gleam/list
@@ -16,13 +17,18 @@ pub fn new(source: String) -> Lexer {
   Lexer(graphemes: string.to_graphemes(source), position: 0)
 }
 
-pub fn lex(lexer: Lexer) -> List(#(Token, Position)) {
-  let #(lexer, #(token, position)) = next(lexer)
+pub fn iterator(lexer: Lexer) -> Iterator(#(Token, Position)) {
+  use lexer <- iterator.unfold(from: lexer)
 
-  case token {
-    token.EndOfFile -> [#(token, position)]
-    _ -> [#(token, position), ..lex(lexer)]
+  case next(lexer) {
+    #(_lexer, #(token.EndOfFile, _position)) -> iterator.Done
+    #(lexer, token) -> iterator.Next(element: token, accumulator: lexer)
   }
+}
+
+pub fn lex(lexer: Lexer) -> List(#(Token, Position)) {
+  iterator(lexer)
+  |> iterator.to_list()
 }
 
 pub fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
