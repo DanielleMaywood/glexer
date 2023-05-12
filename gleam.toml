@@ -1,6 +1,7 @@
 name = "glexer"
-version = "0.1.0"
+version = "0.2.0"
 description = "A Gleam project"
+licenses = ["MIT"]
 
 [dependencies]
 gleam_stdlib = "~> 0.28"
