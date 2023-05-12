@@ -149,6 +149,16 @@ pub fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
     // Strings
     ["\"", ..rest] -> lex_string(rest, "", lexer.position)
 
+    // Discard
+    ["_", ..rest] -> {
+        let name = rest
+            |> list.take_while(predicates.is_alphanum)
+            |> string_builder.from_strings()
+            |> string_builder.to_string()
+
+      #(advance(lexer, by: 1 + string.length(name)), token(lexer, token.DiscardName(name)))
+    }
+
     // Keywords & Literals
     //
     // TODO (@DanielleMaywood):
