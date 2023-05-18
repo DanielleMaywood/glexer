@@ -163,6 +163,17 @@ pub fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
       )
     }
 
+    ["0" as i, ..graphemes]
+    | ["1" as i, ..graphemes]
+    | ["2" as i, ..graphemes]
+    | ["3" as i, ..graphemes]
+    | ["4" as i, ..graphemes]
+    | ["5" as i, ..graphemes]
+    | ["6" as i, ..graphemes]
+    | ["7" as i, ..graphemes]
+    | ["8" as i, ..graphemes]
+    | ["9" as i, ..graphemes] -> lex_number(graphemes, i, True, lexer.position)
+
     // Keywords & Literals
     //
     // TODO (@DanielleMaywood):
@@ -172,13 +183,9 @@ pub fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
     // Unless benchmarks indicate this approach is widely inefficient
     // then this is how it will be until a better approach is suggested.
     [char, ..] ->
-      case
-        predicates.is_lower(char),
-        predicates.is_upper(char),
-        predicates.is_digit(char)
-      {
+      case predicates.is_lower(char) {
         // Lowercase Name
-        True, False, False -> {
+        True -> {
           let name =
             lexer.graphemes
             |> list.take_while(predicates.is_alphanum)
@@ -207,7 +214,7 @@ pub fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
           #(advance(lexer, by: string.length(name)), token(lexer, as_token))
         }
         // Uppercase Name
-        False, True, False -> {
+        False -> {
           let name =
             lexer.graphemes
             |> list.take_while(predicates.is_alphanum)
@@ -218,20 +225,6 @@ pub fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
 
           #(advance(lexer, by: string.length(name)), token(lexer, as_token))
         }
-        // Number
-        False, False, True -> {
-          let number = list.take_while(lexer.graphemes, predicates.is_digit)
-
-          let number =
-            number
-            |> string_builder.from_strings()
-            |> string_builder.to_string()
-
-          let as_token = token.Int(number)
-
-          #(advance(lexer, by: string.length(number)), token(lexer, as_token))
-        }
-        _, _, _ -> panic
       }
   }
 }
@@ -272,5 +265,40 @@ fn lex_string(
 
     // Any other character is content in the string
     [g, ..rest] -> lex_string(rest, content <> g, start)
+  }
+}
+
+fn lex_number(
+  input: List(String),
+  content: String,
+  is_int: Bool,
+  start: Int,
+) -> #(Lexer, #(Token, Position)) {
+  case input {
+    // A dot, the number is a float
+    ["." as g, ..rest] if is_int -> lex_number(rest, content <> g, False, start)
+
+    ["0" as i, ..graphemes]
+    | ["1" as i, ..graphemes]
+    | ["2" as i, ..graphemes]
+    | ["3" as i, ..graphemes]
+    | ["4" as i, ..graphemes]
+    | ["5" as i, ..graphemes]
+    | ["6" as i, ..graphemes]
+    | ["7" as i, ..graphemes]
+    | ["8" as i, ..graphemes]
+    | ["9" as i, ..graphemes] ->
+      lex_number(graphemes, content <> i, is_int, start)
+
+    // Anything else and the number is terminated
+    graphemes -> {
+      // This should use string.byte_size, but that function does not exist yet.
+      let lexer = Lexer(graphemes, start + string.length(content))
+      let token = case is_int {
+        True -> token.Int(content)
+        False -> token.Float(content)
+      }
+      #(lexer, #(token, Position(start)))
+    }
   }
 }

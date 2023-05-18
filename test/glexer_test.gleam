@@ -232,3 +232,24 @@ pub fn string_newline_escape_code_test() {
   |> glexer.lex()
   |> should.equal([#(token.String(" \\n "), Position(0))])
 }
+
+pub fn float_test() {
+  "1.123 4567.89"
+  |> glexer.new()
+  |> glexer.lex()
+  |> should.equal([
+    #(token.Float("1.123"), Position(0)),
+    #(token.Float("4567.89"), Position(6)),
+  ])
+}
+
+pub fn bad_float_test() {
+  "1.123.4567.89"
+  |> glexer.new()
+  |> glexer.lex()
+  |> should.equal([
+    #(token.Float("1.123"), Position(0)),
+    #(token.Dot, Position(5)),
+    #(token.Float("4567.89"), Position(6)),
+  ])
+}
