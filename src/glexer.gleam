@@ -153,7 +153,7 @@ pub fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
     ["_", ..rest] -> {
       let name =
         rest
-        |> list.take_while(predicates.is_alphanum)
+        |> list.take_while(predicates.is_name_grapheme)
         |> string_builder.from_strings()
         |> string_builder.to_string()
 
@@ -188,7 +188,7 @@ pub fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
         True -> {
           let name =
             lexer.graphemes
-            |> list.take_while(predicates.is_alphanum)
+            |> list.take_while(predicates.is_name_grapheme)
             |> string_builder.from_strings()
             |> string_builder.to_string()
 
@@ -217,7 +217,7 @@ pub fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
         False -> {
           let name =
             lexer.graphemes
-            |> list.take_while(predicates.is_alphanum)
+            |> list.take_while(predicates.is_upname_grapheme)
             |> string_builder.from_strings()
             |> string_builder.to_string()
 

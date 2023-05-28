@@ -191,6 +191,13 @@ pub fn sub(lhs: Int, rhs: Int) -> Int {
   ])
 }
 
+pub fn name_with_underscores_test() {
+  "snake_case"
+  |> glexer.new()
+  |> glexer.lex()
+  |> should.equal([#(token.Name("snake_case"), Position(0))])
+}
+
 pub fn string_empty_test() {
   "\"\""
   |> glexer.new()
