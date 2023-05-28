@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.4.2]
+
 ### Added
 
 - Support for snake case names (#5)
