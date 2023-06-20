@@ -1,7 +1,6 @@
 import glexer/internal/predicates
 import glexer/token.{Token}
 import gleam/iterator.{Iterator}
-import gleam/string_builder
 import gleam/string
 import gleam/list
 
@@ -67,10 +66,7 @@ pub fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
     ["/", "/", "/", ..rest] -> {
       let content = list.take_while(rest, fn(char) { char != "\n" })
 
-      let comment =
-        content
-        |> string_builder.from_strings()
-        |> string_builder.to_string()
+      let comment = string.concat(content)
 
       #(
         advance(lexer, by: 3 + list.length(content)),
@@ -154,8 +150,7 @@ pub fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
       let name =
         rest
         |> list.take_while(predicates.is_name_grapheme)
-        |> string_builder.from_strings()
-        |> string_builder.to_string()
+        |> string.concat
 
       #(
         advance(lexer, by: 1 + string.length(name)),
@@ -175,57 +170,101 @@ pub fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
     | ["9" as i, ..graphemes] -> lex_number(graphemes, i, True, lexer.position)
 
     // Keywords & Literals
-    //
-    // TODO (@DanielleMaywood):
-    // Refactor this to be more readable. Currently we cannot call
-    // functions in guard statements which means we can either do
-    // a case on multiple booleans, or create a heavily nested structure.
-    // Unless benchmarks indicate this approach is widely inefficient
-    // then this is how it will be until a better approach is suggested.
-    [char, ..] ->
-      case predicates.is_lower(char) {
-        // Lowercase Name
-        True -> {
-          let name =
-            lexer.graphemes
-            |> list.take_while(predicates.is_name_grapheme)
-            |> string_builder.from_strings()
-            |> string_builder.to_string()
+    // Lowercase Name
+    ["a", ..]
+    | ["b", ..]
+    | ["c", ..]
+    | ["d", ..]
+    | ["e", ..]
+    | ["f", ..]
+    | ["g", ..]
+    | ["h", ..]
+    | ["i", ..]
+    | ["j", ..]
+    | ["k", ..]
+    | ["l", ..]
+    | ["m", ..]
+    | ["n", ..]
+    | ["o", ..]
+    | ["p", ..]
+    | ["q", ..]
+    | ["r", ..]
+    | ["s", ..]
+    | ["t", ..]
+    | ["u", ..]
+    | ["v", ..]
+    | ["w", ..]
+    | ["x", ..]
+    | ["y", ..]
+    | ["z", ..] -> {
+      let name =
+        lexer.graphemes
+        |> list.take_while(predicates.is_name_grapheme)
+        |> string.concat
 
-          let as_token = case name {
-            "as" -> token.As
-            "assert" -> token.Assert
-            "case" -> token.Case
-            "const" -> token.Const
-            "external" -> token.External
-            "fn" -> token.Fn
-            "if" -> token.If
-            "import" -> token.Import
-            "let" -> token.Let
-            "opaque" -> token.Opaque
-            "panic" -> token.Panic
-            "pub" -> token.Pub
-            "todo" -> token.Todo
-            "type" -> token.Type
-            "use" -> token.Use
-            _ -> token.Name(name)
-          }
-
-          #(advance(lexer, by: string.length(name)), token(lexer, as_token))
-        }
-        // Uppercase Name
-        False -> {
-          let name =
-            lexer.graphemes
-            |> list.take_while(predicates.is_upname_grapheme)
-            |> string_builder.from_strings()
-            |> string_builder.to_string()
-
-          let as_token = token.UpperName(name)
-
-          #(advance(lexer, by: string.length(name)), token(lexer, as_token))
-        }
+      let as_token = case name {
+        "as" -> token.As
+        "assert" -> token.Assert
+        "case" -> token.Case
+        "const" -> token.Const
+        "external" -> token.External
+        "fn" -> token.Fn
+        "if" -> token.If
+        "import" -> token.Import
+        "let" -> token.Let
+        "opaque" -> token.Opaque
+        "panic" -> token.Panic
+        "pub" -> token.Pub
+        "todo" -> token.Todo
+        "type" -> token.Type
+        "use" -> token.Use
+        _ -> token.Name(name)
       }
+
+      #(advance(lexer, by: string.length(name)), token(lexer, as_token))
+    }
+
+    // Uppercase Name
+    ["A", ..]
+    | ["B", ..]
+    | ["C", ..]
+    | ["D", ..]
+    | ["E", ..]
+    | ["F", ..]
+    | ["G", ..]
+    | ["H", ..]
+    | ["I", ..]
+    | ["J", ..]
+    | ["K", ..]
+    | ["L", ..]
+    | ["M", ..]
+    | ["N", ..]
+    | ["O", ..]
+    | ["P", ..]
+    | ["Q", ..]
+    | ["R", ..]
+    | ["S", ..]
+    | ["T", ..]
+    | ["U", ..]
+    | ["V", ..]
+    | ["W", ..]
+    | ["X", ..]
+    | ["Y", ..]
+    | ["Z", ..] -> {
+      let name =
+        lexer.graphemes
+        |> list.take_while(predicates.is_upname_grapheme)
+        |> string.concat
+
+      let as_token = token.UpperName(name)
+
+      #(advance(lexer, by: string.length(name)), token(lexer, as_token))
+    }
+
+    [unexpected, ..] -> {
+      let t = token.UnexpectedGrapheme(unexpected)
+      #(advance(lexer, by: string.length(unexpected)), token(lexer, t))
+    }
   }
 }
 

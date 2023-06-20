@@ -84,4 +84,5 @@ pub type Token {
 
   // Invalid code tokens
   UnterminatedString(String)
+  UnexpectedGrapheme(String)
 }

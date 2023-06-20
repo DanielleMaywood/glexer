@@ -260,3 +260,10 @@ pub fn bad_float_test() {
     #(token.Float("4567.89"), Position(6)),
   ])
 }
+
+pub fn unexpected_grapheme_test() {
+  "£"
+  |> glexer.new()
+  |> glexer.lex()
+  |> should.equal([#(token.UnexpectedGrapheme("£"), Position(0))])
+}
