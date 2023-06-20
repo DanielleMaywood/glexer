@@ -14,7 +14,7 @@ packages = [
 ]
 
 [requirements]
-gleam_stdlib = { version = "~> 0.28" }
-gleeunit = { version = "~> 0.10" }
-glychee = { version = "~> 0.2" }
-simplifile = { version = "~> 0.1" }
+gleam_stdlib = "~> 0.28"
+gleeunit = "~> 0.10"
+glychee = "~> 0.2"
+simplifile = "~> 0.1"
