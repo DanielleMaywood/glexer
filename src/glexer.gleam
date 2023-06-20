@@ -2,18 +2,18 @@ import glexer/internal/predicates
 import glexer/token.{Token}
 import gleam/iterator.{Iterator}
 import gleam/string
-import gleam/list
+import gleam/bit_string
 
 pub type Position {
   Position(Int)
 }
 
 pub opaque type Lexer {
-  Lexer(graphemes: List(String), position: Int)
+  Lexer(source: String, position: Int)
 }
 
 pub fn new(source: String) -> Lexer {
-  Lexer(graphemes: string.to_graphemes(source), position: 0)
+  Lexer(source: source, position: 0)
 }
 
 pub fn iterator(lexer: Lexer) -> Iterator(#(Token, Position)) {
@@ -30,11 +30,7 @@ pub fn lex(lexer: Lexer) -> List(#(Token, Position)) {
   |> iterator.to_list()
 }
 
-fn newline(
-  lexer: Lexer,
-  src: List(String),
-  size: Int,
-) -> #(Lexer, #(Token, Position)) {
+fn newline(lexer: Lexer, src: String, size: Int) -> #(Lexer, #(Token, Position)) {
   let start = lexer.position
   case consume_whitespace(Lexer(src, start + size)) {
     #(lexer, True) -> #(lexer, #(token.EmptyLine, Position(start)))
@@ -43,144 +39,146 @@ fn newline(
 }
 
 fn consume_whitespace(lexer: Lexer) -> #(Lexer, Bool) {
-  case lexer.graphemes {
-    [] | ["\n", ..] | ["\r", "\n", ..] -> #(lexer, True)
-    [" ", ..rest] -> consume_whitespace(Lexer(rest, lexer.position + 1))
-    ["\t", ..rest] -> consume_whitespace(Lexer(rest, lexer.position + 1))
+  case lexer.source {
+    "" | "\n" <> _ | "\r\n" <> _ -> #(lexer, True)
+    " " <> rest -> consume_whitespace(Lexer(rest, lexer.position + 1))
+    "\t" <> rest -> consume_whitespace(Lexer(rest, lexer.position + 1))
     _ -> #(lexer, False)
   }
 }
 
 fn comment(
-  src: List(String),
+  src: String,
   start: Int,
   size: Int,
   token: Token,
 ) -> #(Lexer, #(Token, Position)) {
   case src {
-    [] -> #(Lexer(src, start + size), #(token, Position(start)))
-    ["\n", ..] -> #(Lexer(src, start + size), #(token, Position(start)))
-    ["\r", "\n", ..] -> #(Lexer(src, start + size), #(token, Position(start)))
-    [char, ..rest] -> comment(rest, start, size + byte_size(char), token)
-    _ -> #(Lexer(src, start + size), #(token, Position(start)))
+    "\n" <> _ -> #(Lexer(src, start + size), #(token, Position(start)))
+    "\r\n" <> _ -> #(Lexer(src, start + size), #(token, Position(start)))
+    _ -> {
+      case string.pop_grapheme(src) {
+        Error(_) -> #(Lexer(src, start + size), #(token, Position(start)))
+        Ok(#(char, rest)) -> comment(rest, start, size + byte_size(char), token)
+      }
+    }
   }
 }
 
 fn doc_comment(
-  src: List(String),
+  src: String,
   start: Int,
   size: Int,
   content: String,
 ) -> #(Lexer, #(Token, Position)) {
   case src {
-    [] -> #(
+    "\n" <> _ -> #(
       Lexer(src, start + size),
       #(token.CommentDoc(content), Position(start)),
     )
-    ["\n", ..] -> #(
+    "\r\n" <> _ -> #(
       Lexer(src, start + size),
       #(token.CommentDoc(content), Position(start)),
     )
-    ["\r", "\n", ..] -> #(
-      Lexer(src, start + size),
-      #(token.CommentDoc(content), Position(start)),
-    )
-    [char, ..rest] -> {
-      let size = size + byte_size(char)
-      doc_comment(rest, start, size, content <> char)
+    _ -> {
+      case string.pop_grapheme(src) {
+        Error(_) -> #(
+          Lexer(src, start + size),
+          #(token.CommentDoc(content), Position(start)),
+        )
+        Ok(#(char, rest)) -> {
+          let size = size + byte_size(char)
+          doc_comment(rest, start, size, content <> char)
+        }
+      }
     }
   }
 }
 
 fn byte_size(string: String) -> Int {
-  // TODO: use byte size here when it is in the stdlib
-  string.length(string)
+  bit_string.byte_size(<<string:utf8>>)
 }
 
 pub fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
-  case lexer.graphemes {
-    // End Of File
-    [] -> #(lexer, #(token.EndOfFile, Position(lexer.position)))
-
+  case lexer.source {
     // Newline
-    ["\r", "\n", ..rest] -> newline(lexer, rest, 2)
-    ["\n", ..rest] -> newline(lexer, rest, 1)
+    "\r\n" <> rest -> newline(lexer, rest, 2)
+    "\n" <> rest -> newline(lexer, rest, 1)
 
     // Whitespace
-    [" ", ..] | ["\t", ..] -> next(advance(lexer, by: 1))
+    " " <> rest | "\t" <> rest -> next(advance(lexer, rest, 1))
 
     // Comments
-    ["/", "/", "/", "/", ..rest] ->
-      comment(rest, lexer.position, 4, token.CommentModule)
-    ["/", "/", "/", ..rest] -> doc_comment(rest, lexer.position, 3, "")
-    ["/", "/", ..rest] -> comment(rest, lexer.position, 2, token.CommentNormal)
+    "////" <> rest -> comment(rest, lexer.position, 4, token.CommentModule)
+    "///" <> rest -> doc_comment(rest, lexer.position, 3, "")
+    "//" <> rest -> comment(rest, lexer.position, 2, token.CommentNormal)
 
     // Groupings
-    ["(", ..] -> #(advance(lexer, by: 1), token(lexer, token.LeftParen))
-    [")", ..] -> #(advance(lexer, by: 1), token(lexer, token.RightParen))
-    ["{", ..] -> #(advance(lexer, by: 1), token(lexer, token.LeftBrace))
-    ["}", ..] -> #(advance(lexer, by: 1), token(lexer, token.RightBrace))
-    ["[", ..] -> #(advance(lexer, by: 1), token(lexer, token.LeftSquare))
-    ["]", ..] -> #(advance(lexer, by: 1), token(lexer, token.RightSquare))
+    "(" <> rest -> #(advance(lexer, rest, 1), token(lexer, token.LeftParen))
+    ")" <> rest -> #(advance(lexer, rest, 1), token(lexer, token.RightParen))
+    "{" <> rest -> #(advance(lexer, rest, 1), token(lexer, token.LeftBrace))
+    "}" <> rest -> #(advance(lexer, rest, 1), token(lexer, token.RightBrace))
+    "[" <> rest -> #(advance(lexer, rest, 1), token(lexer, token.LeftSquare))
+    "]" <> rest -> #(advance(lexer, rest, 1), token(lexer, token.RightSquare))
 
     // Other Punctuation
-    ["@", ..] -> #(advance(lexer, by: 1), token(lexer, token.At))
-    [":", ..] -> #(advance(lexer, by: 1), token(lexer, token.Colon))
-    [",", ..] -> #(advance(lexer, by: 1), token(lexer, token.Comma))
-    [".", ".", ..] -> #(advance(lexer, by: 2), token(lexer, token.DotDot))
-    [".", ..] -> #(advance(lexer, by: 1), token(lexer, token.Dot))
-    ["#", ..] -> #(advance(lexer, by: 1), token(lexer, token.Hash))
-    ["!", "=", ..] -> #(advance(lexer, by: 2), token(lexer, token.NotEqual))
-    ["!", ..] -> #(advance(lexer, by: 1), token(lexer, token.Bang))
-    ["=", "=", ..] -> #(advance(lexer, by: 2), token(lexer, token.EqualEqual))
-    ["=", ..] -> #(advance(lexer, by: 1), token(lexer, token.Equal))
-    ["|", ">", ..] -> #(advance(lexer, by: 2), token(lexer, token.Pipe))
-    ["|", "|", ..] -> #(advance(lexer, by: 2), token(lexer, token.VBarVBar))
-    ["|", ..] -> #(advance(lexer, by: 1), token(lexer, token.VBar))
-    ["&", "&", ..] -> #(advance(lexer, by: 2), token(lexer, token.AmperAmper))
-    ["<", "<", ..] -> #(advance(lexer, by: 2), token(lexer, token.LessLess))
-    [">", ">", ..] -> #(
-      advance(lexer, by: 2),
+    "@" <> rest -> #(advance(lexer, rest, 1), token(lexer, token.At))
+    ":" <> rest -> #(advance(lexer, rest, 1), token(lexer, token.Colon))
+    "," <> rest -> #(advance(lexer, rest, 1), token(lexer, token.Comma))
+    ".." <> rest -> #(advance(lexer, rest, 2), token(lexer, token.DotDot))
+    "." <> rest -> #(advance(lexer, rest, 1), token(lexer, token.Dot))
+    "#" <> rest -> #(advance(lexer, rest, 1), token(lexer, token.Hash))
+    "!=" <> rest -> #(advance(lexer, rest, 2), token(lexer, token.NotEqual))
+    "!" <> rest -> #(advance(lexer, rest, 1), token(lexer, token.Bang))
+    "==" <> rest -> #(advance(lexer, rest, 2), token(lexer, token.EqualEqual))
+    "=" <> rest -> #(advance(lexer, rest, 1), token(lexer, token.Equal))
+    "|>" <> rest -> #(advance(lexer, rest, 2), token(lexer, token.Pipe))
+    "||" <> rest -> #(advance(lexer, rest, 2), token(lexer, token.VBarVBar))
+    "|" <> rest -> #(advance(lexer, rest, 1), token(lexer, token.VBar))
+    "&&" <> rest -> #(advance(lexer, rest, 2), token(lexer, token.AmperAmper))
+    "<<" <> rest -> #(advance(lexer, rest, 2), token(lexer, token.LessLess))
+    ">>" <> rest -> #(
+      advance(lexer, rest, 2),
       token(lexer, token.GreaterGreater),
     )
-    ["<", "-", ..] -> #(advance(lexer, by: 2), token(lexer, token.LeftArrow))
-    ["-", ">", ..] -> #(advance(lexer, by: 2), token(lexer, token.RightArrow))
+    "<-" <> rest -> #(advance(lexer, rest, 2), token(lexer, token.LeftArrow))
+    "->" <> rest -> #(advance(lexer, rest, 2), token(lexer, token.RightArrow))
 
     // String Operators
-    ["<", ">", ..] -> #(advance(lexer, by: 2), token(lexer, token.LessGreater))
+    "<>" <> rest -> #(advance(lexer, rest, 2), token(lexer, token.LessGreater))
 
     // Float Operators
-    ["+", ".", ..] -> #(advance(lexer, by: 2), token(lexer, token.PlusDot))
-    ["-", ".", ..] -> #(advance(lexer, by: 2), token(lexer, token.MinusDot))
-    ["*", ".", ..] -> #(advance(lexer, by: 2), token(lexer, token.StarDot))
-    ["/", ".", ..] -> #(advance(lexer, by: 2), token(lexer, token.SlashDot))
-    ["<", "=", ".", ..] -> #(
-      advance(lexer, by: 3),
+    "+." <> rest -> #(advance(lexer, rest, 2), token(lexer, token.PlusDot))
+    "-." <> rest -> #(advance(lexer, rest, 2), token(lexer, token.MinusDot))
+    "*." <> rest -> #(advance(lexer, rest, 2), token(lexer, token.StarDot))
+    "/." <> rest -> #(advance(lexer, rest, 2), token(lexer, token.SlashDot))
+    "<=." <> rest -> #(
+      advance(lexer, rest, 3),
       token(lexer, token.LessEqualDot),
     )
-    ["<", ".", ..] -> #(advance(lexer, by: 2), token(lexer, token.LessDot))
-    [">", "=", ".", ..] -> #(
-      advance(lexer, by: 3),
+    "<." <> rest -> #(advance(lexer, rest, 2), token(lexer, token.LessDot))
+    ">=." <> rest -> #(
+      advance(lexer, rest, 3),
       token(lexer, token.GreaterEqualDot),
     )
-    [">", ".", ..] -> #(advance(lexer, by: 2), token(lexer, token.GreaterDot))
+    ">." <> rest -> #(advance(lexer, rest, 2), token(lexer, token.GreaterDot))
 
     // Int Operators
-    ["+", ..] -> #(advance(lexer, by: 1), token(lexer, token.Plus))
-    ["-", ..] -> #(advance(lexer, by: 1), token(lexer, token.Minus))
-    ["*", ..] -> #(advance(lexer, by: 1), token(lexer, token.Star))
-    ["/", ..] -> #(advance(lexer, by: 1), token(lexer, token.Slash))
-    ["<", "=", ..] -> #(advance(lexer, by: 2), token(lexer, token.LessEqual))
-    ["<", ..] -> #(advance(lexer, by: 1), token(lexer, token.Less))
-    [">", "=", ..] -> #(advance(lexer, by: 2), token(lexer, token.GreaterEqual))
-    [">", ..] -> #(advance(lexer, by: 1), token(lexer, token.Greater))
-    ["%", ..] -> #(advance(lexer, by: 1), token(lexer, token.Percent))
+    "+" <> rest -> #(advance(lexer, rest, 1), token(lexer, token.Plus))
+    "-" <> rest -> #(advance(lexer, rest, 1), token(lexer, token.Minus))
+    "*" <> rest -> #(advance(lexer, rest, 1), token(lexer, token.Star))
+    "/" <> rest -> #(advance(lexer, rest, 1), token(lexer, token.Slash))
+    "<=" <> rest -> #(advance(lexer, rest, 2), token(lexer, token.LessEqual))
+    "<" <> rest -> #(advance(lexer, rest, 1), token(lexer, token.Less))
+    ">=" <> rest -> #(advance(lexer, rest, 2), token(lexer, token.GreaterEqual))
+    ">" <> rest -> #(advance(lexer, rest, 1), token(lexer, token.Greater))
+    "%" <> rest -> #(advance(lexer, rest, 1), token(lexer, token.Percent))
 
     // Strings
-    ["\"", ..rest] -> lex_string(rest, "", lexer.position)
+    "\"" <> rest -> lex_string(rest, "", lexer.position)
 
     // Discard
-    ["_", ..rest] -> {
+    "_" <> rest -> {
       let #(name, rest) = take_content(rest, "", predicates.is_name_grapheme)
 
       #(
@@ -189,47 +187,47 @@ pub fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
       )
     }
 
-    ["0" as i, ..graphemes]
-    | ["1" as i, ..graphemes]
-    | ["2" as i, ..graphemes]
-    | ["3" as i, ..graphemes]
-    | ["4" as i, ..graphemes]
-    | ["5" as i, ..graphemes]
-    | ["6" as i, ..graphemes]
-    | ["7" as i, ..graphemes]
-    | ["8" as i, ..graphemes]
-    | ["9" as i, ..graphemes] -> lex_number(graphemes, i, True, lexer.position)
+    "0" <> source -> lex_number(source, "0", True, lexer.position)
+    "1" <> source -> lex_number(source, "1", True, lexer.position)
+    "2" <> source -> lex_number(source, "2", True, lexer.position)
+    "3" <> source -> lex_number(source, "3", True, lexer.position)
+    "4" <> source -> lex_number(source, "4", True, lexer.position)
+    "5" <> source -> lex_number(source, "5", True, lexer.position)
+    "6" <> source -> lex_number(source, "6", True, lexer.position)
+    "7" <> source -> lex_number(source, "7", True, lexer.position)
+    "8" <> source -> lex_number(source, "8", True, lexer.position)
+    "9" <> source -> lex_number(source, "9", True, lexer.position)
 
     // Keywords & Literals
     // Lowercase Name
-    ["a", ..]
-    | ["b", ..]
-    | ["c", ..]
-    | ["d", ..]
-    | ["e", ..]
-    | ["f", ..]
-    | ["g", ..]
-    | ["h", ..]
-    | ["i", ..]
-    | ["j", ..]
-    | ["k", ..]
-    | ["l", ..]
-    | ["m", ..]
-    | ["n", ..]
-    | ["o", ..]
-    | ["p", ..]
-    | ["q", ..]
-    | ["r", ..]
-    | ["s", ..]
-    | ["t", ..]
-    | ["u", ..]
-    | ["v", ..]
-    | ["w", ..]
-    | ["x", ..]
-    | ["y", ..]
-    | ["z", ..] -> {
+    "a" <> _
+    | "b" <> _
+    | "c" <> _
+    | "d" <> _
+    | "e" <> _
+    | "f" <> _
+    | "g" <> _
+    | "h" <> _
+    | "i" <> _
+    | "j" <> _
+    | "k" <> _
+    | "l" <> _
+    | "m" <> _
+    | "n" <> _
+    | "o" <> _
+    | "p" <> _
+    | "q" <> _
+    | "r" <> _
+    | "s" <> _
+    | "t" <> _
+    | "u" <> _
+    | "v" <> _
+    | "w" <> _
+    | "x" <> _
+    | "y" <> _
+    | "z" <> _ -> {
       let #(name, rest) =
-        take_content(lexer.graphemes, "", predicates.is_name_grapheme)
+        take_content(lexer.source, "", predicates.is_name_grapheme)
 
       let as_token = case name {
         "as" -> token.As
@@ -254,66 +252,69 @@ pub fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
     }
 
     // Uppercase Name
-    ["A", ..]
-    | ["B", ..]
-    | ["C", ..]
-    | ["D", ..]
-    | ["E", ..]
-    | ["F", ..]
-    | ["G", ..]
-    | ["H", ..]
-    | ["I", ..]
-    | ["J", ..]
-    | ["K", ..]
-    | ["L", ..]
-    | ["M", ..]
-    | ["N", ..]
-    | ["O", ..]
-    | ["P", ..]
-    | ["Q", ..]
-    | ["R", ..]
-    | ["S", ..]
-    | ["T", ..]
-    | ["U", ..]
-    | ["V", ..]
-    | ["W", ..]
-    | ["X", ..]
-    | ["Y", ..]
-    | ["Z", ..] -> {
+    "A" <> _
+    | "B" <> _
+    | "C" <> _
+    | "D" <> _
+    | "E" <> _
+    | "F" <> _
+    | "G" <> _
+    | "H" <> _
+    | "I" <> _
+    | "J" <> _
+    | "K" <> _
+    | "L" <> _
+    | "M" <> _
+    | "N" <> _
+    | "O" <> _
+    | "P" <> _
+    | "Q" <> _
+    | "R" <> _
+    | "S" <> _
+    | "T" <> _
+    | "U" <> _
+    | "V" <> _
+    | "W" <> _
+    | "X" <> _
+    | "Y" <> _
+    | "Z" <> _ -> {
       let #(name, rest) =
-        take_content(lexer.graphemes, "", predicates.is_upname_grapheme)
+        take_content(lexer.source, "", predicates.is_upname_grapheme)
       let as_token = token.UpperName(name)
       #(Lexer(rest, lexer.position + byte_size(name)), token(lexer, as_token))
     }
 
-    [unexpected, ..] -> {
-      let t = token.UnexpectedGrapheme(unexpected)
-      #(advance(lexer, by: string.length(unexpected)), token(lexer, t))
-    }
-  }
-}
-
-pub fn take_content(
-  graphemes: List(String),
-  content: String,
-  predicate: fn(String) -> Bool,
-) -> #(String, List(String)) {
-  case graphemes {
-    [] -> #(content, [])
-    [grapheme, ..rest] -> {
-      case predicate(grapheme) {
-        True -> take_content(rest, content <> grapheme, predicate)
-        False -> #(content, graphemes)
+    _ -> {
+      case string.pop_grapheme(lexer.source) {
+        // End Of File
+        Error(_) -> #(lexer, #(token.EndOfFile, Position(lexer.position)))
+        Ok(#(grapheme, rest)) -> {
+          let t = token.UnexpectedGrapheme(grapheme)
+          #(advance(lexer, rest, byte_size(grapheme)), token(lexer, t))
+        }
       }
     }
   }
 }
 
-fn advance(lexer: Lexer, by offset: Int) -> Lexer {
-  Lexer(
-    graphemes: list.drop(lexer.graphemes, up_to: offset),
-    position: lexer.position + offset,
-  )
+pub fn take_content(
+  source: String,
+  content: String,
+  predicate: fn(String) -> Bool,
+) -> #(String, String) {
+  case string.pop_grapheme(source) {
+    Error(_) -> #(content, "")
+    Ok(#(grapheme, rest)) -> {
+      case predicate(grapheme) {
+        True -> take_content(rest, content <> grapheme, predicate)
+        False -> #(content, source)
+      }
+    }
+  }
+}
+
+fn advance(lexer: Lexer, source: String, offset: Int) -> Lexer {
+  Lexer(source: source, position: lexer.position + offset)
 }
 
 fn token(lexer: Lexer, token: Token) -> #(Token, Position) {
@@ -321,59 +322,65 @@ fn token(lexer: Lexer, token: Token) -> #(Token, Position) {
 }
 
 fn lex_string(
-  input: List(String),
+  input: String,
   content: String,
   start: Int,
 ) -> #(Lexer, #(Token, Position)) {
   case input {
-    // End of input, the string is unterminated
-    [] -> {
-      // This should use string.byte_size, but that function does not exist yet.
-      let lexer = Lexer([], start + string.length(content) + 1)
-      #(lexer, #(token.UnterminatedString(content), Position(start)))
-    }
-
     // A double quote, the string is terminated
-    ["\"", ..rest] -> {
-      // This should use string.byte_size, but that function does not exist yet.
-      let lexer = Lexer(rest, start + string.length(content) + 2)
+    "\"" <> rest -> {
+      let lexer = Lexer(rest, start + byte_size(content) + 2)
       #(lexer, #(token.String(content), Position(start)))
     }
 
     // A backslash escapes the following character
-    ["\\" as g1, g2, ..rest] -> lex_string(rest, content <> g1 <> g2, start)
+    "\\" <> rest -> {
+      case string.pop_grapheme(rest) {
+        Error(_) -> lex_string(rest, content <> "\\", start)
+        Ok(#(g, rest)) -> lex_string(rest, content <> "\\" <> g, start)
+      }
+    }
 
     // Any other character is content in the string
-    [g, ..rest] -> lex_string(rest, content <> g, start)
+    _ -> {
+      case string.pop_grapheme(input) {
+        Ok(#(g, rest)) -> lex_string(rest, content <> g, start)
+
+        // End of input, the string is unterminated
+        Error(_) -> {
+          let lexer = Lexer("", start + byte_size(content) + 1)
+          #(lexer, #(token.UnterminatedString(content), Position(start)))
+        }
+      }
+    }
   }
 }
 
 fn lex_number(
-  input: List(String),
+  input: String,
   content: String,
   is_int: Bool,
   start: Int,
 ) -> #(Lexer, #(Token, Position)) {
   case input {
     // A dot, the number is a float
-    ["." as g, ..rest] if is_int -> lex_number(rest, content <> g, False, start)
+    "." <> rest if is_int -> lex_number(rest, content <> ".", False, start)
 
-    ["0" as i, ..graphemes]
-    | ["1" as i, ..graphemes]
-    | ["2" as i, ..graphemes]
-    | ["3" as i, ..graphemes]
-    | ["4" as i, ..graphemes]
-    | ["5" as i, ..graphemes]
-    | ["6" as i, ..graphemes]
-    | ["7" as i, ..graphemes]
-    | ["8" as i, ..graphemes]
-    | ["9" as i, ..graphemes] ->
-      lex_number(graphemes, content <> i, is_int, start)
+    "0" <> source -> lex_number(source, content <> "0", is_int, start)
+    "1" <> source -> lex_number(source, content <> "1", is_int, start)
+    "2" <> source -> lex_number(source, content <> "2", is_int, start)
+    "3" <> source -> lex_number(source, content <> "3", is_int, start)
+    "4" <> source -> lex_number(source, content <> "4", is_int, start)
+    "5" <> source -> lex_number(source, content <> "5", is_int, start)
+    "6" <> source -> lex_number(source, content <> "6", is_int, start)
+    "7" <> source -> lex_number(source, content <> "7", is_int, start)
+    "8" <> source -> lex_number(source, content <> "8", is_int, start)
+    "9" <> source -> lex_number(source, content <> "9", is_int, start)
 
     // Anything else and the number is terminated
-    graphemes -> {
+    source -> {
       // This should use string.byte_size, but that function does not exist yet.
-      let lexer = Lexer(graphemes, start + string.length(content))
+      let lexer = Lexer(source, start + string.length(content))
       let token = case is_int {
         True -> token.Int(content)
         False -> token.Float(content)
