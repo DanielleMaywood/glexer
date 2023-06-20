@@ -199,6 +199,25 @@ pub fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
     "9" <> source -> lex_number(source, "9", True, lexer.position)
 
     // Keywords & Literals
+    "assert" <> rest -> #(advance(lexer, rest, 6), token(lexer, token.Assert))
+    "as" <> rest -> #(advance(lexer, rest, 2), token(lexer, token.As))
+    "case" <> rest -> #(advance(lexer, rest, 4), token(lexer, token.Case))
+    "const" <> rest -> #(advance(lexer, rest, 5), token(lexer, token.Const))
+    "external" <> rest -> #(
+      advance(lexer, rest, 8),
+      token(lexer, token.External),
+    )
+    "fn" <> rest -> #(advance(lexer, rest, 2), token(lexer, token.Fn))
+    "if" <> rest -> #(advance(lexer, rest, 2), token(lexer, token.If))
+    "import" <> rest -> #(advance(lexer, rest, 6), token(lexer, token.Import))
+    "let" <> rest -> #(advance(lexer, rest, 3), token(lexer, token.Let))
+    "opaque" <> rest -> #(advance(lexer, rest, 6), token(lexer, token.Opaque))
+    "panic" <> rest -> #(advance(lexer, rest, 5), token(lexer, token.Panic))
+    "pub" <> rest -> #(advance(lexer, rest, 3), token(lexer, token.Pub))
+    "todo" <> rest -> #(advance(lexer, rest, 4), token(lexer, token.Todo))
+    "type" <> rest -> #(advance(lexer, rest, 4), token(lexer, token.Type))
+    "use" <> rest -> #(advance(lexer, rest, 3), token(lexer, token.Use))
+
     // Lowercase Name
     "a" <> _
     | "b" <> _
@@ -228,26 +247,7 @@ pub fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
     | "z" <> _ -> {
       let #(name, rest) =
         take_content(lexer.source, "", predicates.is_name_grapheme)
-
-      let as_token = case name {
-        "as" -> token.As
-        "assert" -> token.Assert
-        "case" -> token.Case
-        "const" -> token.Const
-        "external" -> token.External
-        "fn" -> token.Fn
-        "if" -> token.If
-        "import" -> token.Import
-        "let" -> token.Let
-        "opaque" -> token.Opaque
-        "panic" -> token.Panic
-        "pub" -> token.Pub
-        "todo" -> token.Todo
-        "type" -> token.Type
-        "use" -> token.Use
-        _ -> token.Name(name)
-      }
-
+      let as_token = token.Name(name)
       #(Lexer(rest, lexer.position + byte_size(name)), token(lexer, as_token))
     }
 
