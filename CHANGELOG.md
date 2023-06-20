@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Support for the `@` tokens.
+- Support for unexpected graphemes that are not valid tokens.
+
 ## [0.4.2]
 
 ### Added
