@@ -91,6 +91,7 @@ pub fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
     ["]", ..] -> #(advance(lexer, by: 1), token(lexer, token.RightSquare))
 
     // Other Punctuation
+    ["@", ..] -> #(advance(lexer, by: 1), token(lexer, token.At))
     [":", ..] -> #(advance(lexer, by: 1), token(lexer, token.Colon))
     [",", ..] -> #(advance(lexer, by: 1), token(lexer, token.Comma))
     [".", ".", ..] -> #(advance(lexer, by: 2), token(lexer, token.DotDot))

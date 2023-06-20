@@ -58,6 +58,7 @@ pub type Token {
   LessGreater
 
   // Other Punctuation
+  At
   Colon
   Comma
   Hash

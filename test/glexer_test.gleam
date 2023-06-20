@@ -267,3 +267,10 @@ pub fn unexpected_grapheme_test() {
   |> glexer.lex()
   |> should.equal([#(token.UnexpectedGrapheme("£"), Position(0))])
 }
+
+pub fn at_test() {
+  "@"
+  |> glexer.new()
+  |> glexer.lex()
+  |> should.equal([#(token.At, Position(0))])
+}
