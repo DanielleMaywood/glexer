@@ -58,6 +58,7 @@ pub type Token {
   LessGreater
 
   // Other Punctuation
+  At
   Colon
   Comma
   Hash
@@ -84,4 +85,5 @@ pub type Token {
 
   // Invalid code tokens
   UnterminatedString(String)
+  UnexpectedGrapheme(String)
 }
