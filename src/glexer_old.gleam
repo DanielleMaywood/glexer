@@ -30,90 +30,57 @@ pub fn lex(lexer: Lexer) -> List(#(Token, Position)) {
   |> iterator.to_list()
 }
 
-fn newline(
-  lexer: Lexer,
-  src: List(String),
-  size: Int,
-) -> #(Lexer, #(Token, Position)) {
-  let start = lexer.position
-  case consume_whitespace(Lexer(src, start + size)) {
-    #(lexer, True) -> #(lexer, #(token.EmptyLine, Position(start)))
-    #(lexer, False) -> next(lexer)
-  }
-}
-
-fn consume_whitespace(lexer: Lexer) -> #(Lexer, Bool) {
-  case lexer.graphemes {
-    [] | ["\n", ..] | ["\r", "\n", ..] -> #(lexer, True)
-    [" ", ..rest] -> consume_whitespace(Lexer(rest, lexer.position + 1))
-    ["\t", ..rest] -> consume_whitespace(Lexer(rest, lexer.position + 1))
-    _ -> #(lexer, False)
-  }
-}
-
-fn comment(
-  src: List(String),
-  start: Int,
-  size: Int,
-  token: Token,
-) -> #(Lexer, #(Token, Position)) {
-  case src {
-    [] -> #(Lexer(src, start + size), #(token, Position(start)))
-    ["\n", ..] -> #(Lexer(src, start + size), #(token, Position(start)))
-    ["\r", "\n", ..] -> #(Lexer(src, start + size), #(token, Position(start)))
-    [char, ..rest] -> comment(rest, start, size + byte_size(char), token)
-    _ -> #(Lexer(src, start + size), #(token, Position(start)))
-  }
-}
-
-fn doc_comment(
-  src: List(String),
-  start: Int,
-  size: Int,
-  content: String,
-) -> #(Lexer, #(Token, Position)) {
-  case src {
-    [] -> #(
-      Lexer(src, start + size),
-      #(token.CommentDoc(content), Position(start)),
-    )
-    ["\n", ..] -> #(
-      Lexer(src, start + size),
-      #(token.CommentDoc(content), Position(start)),
-    )
-    ["\r", "\n", ..] -> #(
-      Lexer(src, start + size),
-      #(token.CommentDoc(content), Position(start)),
-    )
-    [char, ..rest] -> {
-      let size = size + byte_size(char)
-      doc_comment(rest, start, size, content <> char)
-    }
-  }
-}
-
-fn byte_size(string: String) -> Int {
-  // TODO: use byte size here when it is in the stdlib
-  string.length(string)
-}
-
 pub fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
   case lexer.graphemes {
     // End Of File
     [] -> #(lexer, #(token.EndOfFile, Position(lexer.position)))
 
     // Newline
-    ["\r", "\n", ..rest] -> newline(lexer, rest, 2)
-    ["\n", ..rest] -> newline(lexer, rest, 1)
+    ["\r", "\n", ..rest] | ["\n", ..rest] -> {
+      // TODO (@DanielleMaywood):
+      // There is probably be a more efficient way to do this.
+      let line = list.take_while(rest, fn(char) { char != "\n" })
+      let is_empty = list.all(line, fn(char) { char == " " || char == "\t" })
+
+      case is_empty {
+        True -> #(
+          advance(lexer, by: 1 + list.length(line)),
+          token(lexer, token.EmptyLine),
+        )
+        False -> next(advance(lexer, by: 1))
+      }
+    }
 
     // Whitespace
     [" ", ..] | ["\t", ..] -> next(advance(lexer, by: 1))
 
     // Comments
-    ["/", "/", "/", "/", ..rest] ->
-      comment(rest, lexer.position, 4, token.CommentModule)
-    ["/", "/", "/", ..rest] -> doc_comment(rest, lexer.position, 3, "")
-    ["/", "/", ..rest] -> comment(rest, lexer.position, 2, token.CommentNormal)
+    ["/", "/", "/", "/", ..rest] -> {
+      let content = list.take_while(rest, fn(char) { char != "\n" })
+
+      #(
+        advance(lexer, by: 4 + list.length(content)),
+        token(lexer, token.CommentModule),
+      )
+    }
+    ["/", "/", "/", ..rest] -> {
+      let content = list.take_while(rest, fn(char) { char != "\n" })
+
+      let comment = string.concat(content)
+
+      #(
+        advance(lexer, by: 3 + list.length(content)),
+        token(lexer, token.CommentDoc(comment)),
+      )
+    }
+    ["/", "/", ..rest] -> {
+      let content = list.take_while(rest, fn(char) { char != "\n" })
+
+      #(
+        advance(lexer, by: 2 + list.length(content)),
+        token(lexer, token.CommentNormal),
+      )
+    }
 
     // Groupings
     ["(", ..] -> #(advance(lexer, by: 1), token(lexer, token.LeftParen))
@@ -181,10 +148,13 @@ pub fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
 
     // Discard
     ["_", ..rest] -> {
-      let #(name, rest) = take_content(rest, "", predicates.is_name_grapheme)
+      let name =
+        rest
+        |> list.take_while(predicates.is_name_grapheme)
+        |> string.concat
 
       #(
-        Lexer(rest, lexer.position + byte_size(name)),
+        advance(lexer, by: 1 + string.length(name)),
         token(lexer, token.DiscardName(name)),
       )
     }
@@ -228,8 +198,10 @@ pub fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
     | ["x", ..]
     | ["y", ..]
     | ["z", ..] -> {
-      let #(name, rest) =
-        take_content(lexer.graphemes, "", predicates.is_name_grapheme)
+      let name =
+        lexer.graphemes
+        |> list.take_while(predicates.is_name_grapheme)
+        |> string.concat
 
       let as_token = case name {
         "as" -> token.As
@@ -250,7 +222,7 @@ pub fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
         _ -> token.Name(name)
       }
 
-      #(Lexer(rest, lexer.position + byte_size(name)), token(lexer, as_token))
+      #(advance(lexer, by: string.length(name)), token(lexer, as_token))
     }
 
     // Uppercase Name
@@ -280,31 +252,19 @@ pub fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
     | ["X", ..]
     | ["Y", ..]
     | ["Z", ..] -> {
-      let #(name, rest) =
-        take_content(lexer.graphemes, "", predicates.is_upname_grapheme)
+      let name =
+        lexer.graphemes
+        |> list.take_while(predicates.is_upname_grapheme)
+        |> string.concat
+
       let as_token = token.UpperName(name)
-      #(Lexer(rest, lexer.position + byte_size(name)), token(lexer, as_token))
+
+      #(advance(lexer, by: string.length(name)), token(lexer, as_token))
     }
 
     [unexpected, ..] -> {
       let t = token.UnexpectedGrapheme(unexpected)
       #(advance(lexer, by: string.length(unexpected)), token(lexer, t))
-    }
-  }
-}
-
-pub fn take_content(
-  graphemes: List(String),
-  content: String,
-  predicate: fn(String) -> Bool,
-) -> #(String, List(String)) {
-  case graphemes {
-    [] -> #(content, [])
-    [grapheme, ..rest] -> {
-      case predicate(grapheme) {
-        True -> take_content(rest, content <> grapheme, predicate)
-        False -> #(content, graphemes)
-      }
     }
   }
 }

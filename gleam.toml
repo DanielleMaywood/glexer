@@ -8,3 +8,5 @@ gleam_stdlib = "~> 0.28"
 
 [dev-dependencies]
 gleeunit = "~> 0.10"
+glychee = "~> 0.2"
+simplifile = "~> 0.1"
