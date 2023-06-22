@@ -274,3 +274,16 @@ pub fn at_test() {
   |> glexer.lex()
   |> should.equal([#(token.At, Position(0))])
 }
+
+pub fn keyword_prefix_test() {
+  "lettuce let uce let!"
+  |> glexer.new()
+  |> glexer.lex()
+  |> should.equal([
+    #(token.Name("lettuce"), Position(0)),
+    #(token.Let, Position(8)),
+    #(token.Name("uce"), Position(12)),
+    #(token.Let, Position(16)),
+    #(token.Bang, Position(19)),
+  ])
+}
