@@ -7,6 +7,10 @@
 - Support for binary, octal and hexadecimal ints, and scientific notation
   floats.
 
+### Changed
+
+- Performance improvements
+
 ## [0.5.0]
 
 ### Added
