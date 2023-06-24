@@ -287,3 +287,31 @@ pub fn keyword_prefix_test() {
     #(token.Bang, Position(19)),
   ])
 }
+
+pub fn underscore_ints_test() {
+  "1_000_000"
+  |> glexer.new()
+  |> glexer.lex()
+  |> should.equal([#(token.Int("1_000_000"), Position(0))])
+}
+
+pub fn underscore_floats_test() {
+  "1_000_000.123_567"
+  |> glexer.new()
+  |> glexer.lex()
+  |> should.equal([#(token.Float("1_000_000.123_567"), Position(0))])
+}
+
+pub fn scientific_test() {
+  "1.01e3"
+  |> glexer.new()
+  |> glexer.lex()
+  |> should.equal([#(token.Float("1.01e3"), Position(0))])
+}
+
+pub fn scientific_negative_test() {
+  "15.1e-3"
+  |> glexer.new()
+  |> glexer.lex()
+  |> should.equal([#(token.Float("15.1e-3"), Position(0))])
+}

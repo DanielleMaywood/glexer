@@ -187,16 +187,20 @@ pub fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
       )
     }
 
-    "0" <> source -> lex_number(source, "0", True, lexer.position)
-    "1" <> source -> lex_number(source, "1", True, lexer.position)
-    "2" <> source -> lex_number(source, "2", True, lexer.position)
-    "3" <> source -> lex_number(source, "3", True, lexer.position)
-    "4" <> source -> lex_number(source, "4", True, lexer.position)
-    "5" <> source -> lex_number(source, "5", True, lexer.position)
-    "6" <> source -> lex_number(source, "6", True, lexer.position)
-    "7" <> source -> lex_number(source, "7", True, lexer.position)
-    "8" <> source -> lex_number(source, "8", True, lexer.position)
-    "9" <> source -> lex_number(source, "9", True, lexer.position)
+    "0" <> source -> lex_number(source, "0", LexInt, lexer.position)
+    "1" <> source -> lex_number(source, "1", LexInt, lexer.position)
+    "2" <> source -> lex_number(source, "2", LexInt, lexer.position)
+    "3" <> source -> lex_number(source, "3", LexInt, lexer.position)
+    "4" <> source -> lex_number(source, "4", LexInt, lexer.position)
+    "5" <> source -> lex_number(source, "5", LexInt, lexer.position)
+    "6" <> source -> lex_number(source, "6", LexInt, lexer.position)
+    "7" <> source -> lex_number(source, "7", LexInt, lexer.position)
+    "8" <> source -> lex_number(source, "8", LexInt, lexer.position)
+    "9" <> source -> lex_number(source, "9", LexInt, lexer.position)
+
+    "0b" <> source -> lex_binary(source, "0b", lexer.position)
+    "0o" <> source -> lex_octal(source, "0o", lexer.position)
+    "0x" <> source -> lex_hexadecimal(source, "0x", lexer.position)
 
     // Keywords & Literals
     // Lowercase Name
@@ -355,36 +359,116 @@ fn lex_string(
   }
 }
 
+pub type NumberLexerMode {
+  LexInt
+  LexFloat
+  LexFloatExponent
+}
+
 fn lex_number(
   input: String,
   content: String,
-  is_int: Bool,
+  mode: NumberLexerMode,
   start: Int,
 ) -> #(Lexer, #(Token, Position)) {
   case input {
     // A dot, the number is a float
-    "." <> rest if is_int -> lex_number(rest, content <> ".", False, start)
+    "." <> rest if mode == LexInt ->
+      lex_number(rest, content <> ".", LexFloat, start)
 
-    "0" <> source -> lex_number(source, content <> "0", is_int, start)
-    "1" <> source -> lex_number(source, content <> "1", is_int, start)
-    "2" <> source -> lex_number(source, content <> "2", is_int, start)
-    "3" <> source -> lex_number(source, content <> "3", is_int, start)
-    "4" <> source -> lex_number(source, content <> "4", is_int, start)
-    "5" <> source -> lex_number(source, content <> "5", is_int, start)
-    "6" <> source -> lex_number(source, content <> "6", is_int, start)
-    "7" <> source -> lex_number(source, content <> "7", is_int, start)
-    "8" <> source -> lex_number(source, content <> "8", is_int, start)
-    "9" <> source -> lex_number(source, content <> "9", is_int, start)
+    "e-" <> rest if mode == LexFloat ->
+      lex_number(rest, content <> "e-", LexFloatExponent, start)
+    "e" <> rest if mode == LexFloat ->
+      lex_number(rest, content <> "e", LexFloatExponent, start)
+
+    "_" <> source -> lex_number(source, content <> "_", mode, start)
+    "0" <> source -> lex_number(source, content <> "0", mode, start)
+    "1" <> source -> lex_number(source, content <> "1", mode, start)
+    "2" <> source -> lex_number(source, content <> "2", mode, start)
+    "3" <> source -> lex_number(source, content <> "3", mode, start)
+    "4" <> source -> lex_number(source, content <> "4", mode, start)
+    "5" <> source -> lex_number(source, content <> "5", mode, start)
+    "6" <> source -> lex_number(source, content <> "6", mode, start)
+    "7" <> source -> lex_number(source, content <> "7", mode, start)
+    "8" <> source -> lex_number(source, content <> "8", mode, start)
+    "9" <> source -> lex_number(source, content <> "9", mode, start)
 
     // Anything else and the number is terminated
     source -> {
-      // This should use string.byte_size, but that function does not exist yet.
-      let lexer = Lexer(source, start + string.length(content))
-      let token = case is_int {
-        True -> token.Int(content)
-        False -> token.Float(content)
+      let lexer = Lexer(source, start + byte_size(content))
+      let token = case mode {
+        LexInt -> token.Int(content)
+        LexFloat | LexFloatExponent -> token.Float(content)
       }
       #(lexer, #(token, Position(start)))
+    }
+  }
+}
+
+fn lex_binary(
+  source: String,
+  content: String,
+  start: Int,
+) -> #(Lexer, #(Token, Position)) {
+  case source {
+    "_" <> source -> lex_binary(source, content <> "_", start)
+    "0" <> source -> lex_binary(source, content <> "0", start)
+    "1" <> source -> lex_binary(source, content <> "1", start)
+    source -> {
+      let lexer = Lexer(source, start + byte_size(content))
+      #(lexer, #(token.Int(content), Position(start)))
+    }
+  }
+}
+
+fn lex_octal(
+  source: String,
+  content: String,
+  start: Int,
+) -> #(Lexer, #(Token, Position)) {
+  case source {
+    "_" <> source -> lex_octal(source, content <> "_", start)
+    "0" <> source -> lex_octal(source, content <> "0", start)
+    "1" <> source -> lex_octal(source, content <> "1", start)
+    "2" <> source -> lex_octal(source, content <> "2", start)
+    "3" <> source -> lex_octal(source, content <> "3", start)
+    "4" <> source -> lex_octal(source, content <> "4", start)
+    "5" <> source -> lex_octal(source, content <> "5", start)
+    "6" <> source -> lex_octal(source, content <> "6", start)
+    "7" <> source -> lex_octal(source, content <> "7", start)
+    source -> {
+      let lexer = Lexer(source, start + byte_size(content))
+      #(lexer, #(token.Int(content), Position(start)))
+    }
+  }
+}
+
+fn lex_hexadecimal(
+  source: String,
+  content: String,
+  start: Int,
+) -> #(Lexer, #(Token, Position)) {
+  case source {
+    "_" <> source -> lex_octal(source, content <> "_", start)
+    "0" <> source -> lex_octal(source, content <> "0", start)
+    "1" <> source -> lex_octal(source, content <> "1", start)
+    "2" <> source -> lex_octal(source, content <> "2", start)
+    "3" <> source -> lex_octal(source, content <> "3", start)
+    "4" <> source -> lex_octal(source, content <> "4", start)
+    "5" <> source -> lex_octal(source, content <> "5", start)
+    "6" <> source -> lex_octal(source, content <> "6", start)
+    "7" <> source -> lex_octal(source, content <> "7", start)
+    "8" <> source -> lex_octal(source, content <> "8", start)
+    "9" <> source -> lex_octal(source, content <> "9", start)
+    "a" <> source -> lex_octal(source, content <> "a", start)
+    "b" <> source -> lex_octal(source, content <> "b", start)
+    "c" <> source -> lex_octal(source, content <> "c", start)
+    "d" <> source -> lex_octal(source, content <> "d", start)
+    "e" <> source -> lex_octal(source, content <> "e", start)
+    "f" <> source -> lex_octal(source, content <> "f", start)
+    source -> {
+      let lexer = Lexer(source, start + byte_size(content))
+      #(lexer, #(token.Int(content), Position(start)))
     }
   }
 }
