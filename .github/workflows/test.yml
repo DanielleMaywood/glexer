@@ -11,6 +11,7 @@ jobs:
         with:
           otp-version: 25.2
           gleam-version: 0.28.3
+          elixir-version: 1.15.0
           rebar3-version: 3
       - run: gleam format --check src test
       - run: gleam deps download
