@@ -187,6 +187,10 @@ pub fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
       )
     }
 
+    "0b" <> source -> lex_binary(source, "0b", lexer.position)
+    "0o" <> source -> lex_octal(source, "0o", lexer.position)
+    "0x" <> source -> lex_hexadecimal(source, "0x", lexer.position)
+
     "0" <> source -> lex_number(source, "0", LexInt, lexer.position)
     "1" <> source -> lex_number(source, "1", LexInt, lexer.position)
     "2" <> source -> lex_number(source, "2", LexInt, lexer.position)
@@ -197,10 +201,6 @@ pub fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
     "7" <> source -> lex_number(source, "7", LexInt, lexer.position)
     "8" <> source -> lex_number(source, "8", LexInt, lexer.position)
     "9" <> source -> lex_number(source, "9", LexInt, lexer.position)
-
-    "0b" <> source -> lex_binary(source, "0b", lexer.position)
-    "0o" <> source -> lex_octal(source, "0o", lexer.position)
-    "0x" <> source -> lex_hexadecimal(source, "0x", lexer.position)
 
     // Keywords & Literals
     // Lowercase Name

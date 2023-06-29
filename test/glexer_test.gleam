@@ -315,3 +315,29 @@ pub fn scientific_negative_test() {
   |> glexer.lex()
   |> should.equal([#(token.Float("15.1e-3"), Position(0))])
 }
+
+pub fn hex_test() {
+  "0x0 [0x0]"
+  |> glexer.new()
+  |> glexer.lex()
+  |> should.equal([
+    #(token.Int("0x0"), Position(0)),
+    #(token.LeftSquare, Position(4)),
+    #(token.Int("0x0"), Position(5)),
+    #(token.RightSquare, Position(8)),
+  ])
+}
+
+pub fn binary_test() {
+  "0b0101"
+  |> glexer.new()
+  |> glexer.lex()
+  |> should.equal([#(token.Int("0b0101"), Position(0))])
+}
+
+pub fn octal_test() {
+  "0o123"
+  |> glexer.new()
+  |> glexer.lex()
+  |> should.equal([#(token.Int("0o123"), Position(0))])
+}
