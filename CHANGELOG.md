@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.6.2]
+
+### Fixed
+
+- Fixes broken support for hexadecimal ints were broken.
+
+## [0.6.1]
+
+### Fixed
+
+- Fixes broken support for binary, octal and hexadecimal ints.
+
 ## [0.6.0]
 
 ### Added
