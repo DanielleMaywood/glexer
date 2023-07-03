@@ -317,14 +317,14 @@ pub fn scientific_negative_test() {
 }
 
 pub fn hex_test() {
-  "0x0 [0x0]"
+  "0xFFAFF3 [0x0123456789ABCDEF]"
   |> glexer.new()
   |> glexer.lex()
   |> should.equal([
-    #(token.Int("0x0"), Position(0)),
-    #(token.LeftSquare, Position(4)),
-    #(token.Int("0x0"), Position(5)),
-    #(token.RightSquare, Position(8)),
+    #(token.Int("0xFFAFF3"), Position(0)),
+    #(token.LeftSquare, Position(9)),
+    #(token.Int("0x0123456789ABCDEF"), Position(10)),
+    #(token.RightSquare, Position(28)),
   ])
 }
 
