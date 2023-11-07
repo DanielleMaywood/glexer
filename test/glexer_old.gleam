@@ -1,6 +1,6 @@
 import glexer/internal/predicates
-import glexer/token.{Token}
-import gleam/iterator.{Iterator}
+import glexer/token.{type Token}
+import gleam/iterator.{type Iterator}
 import gleam/string
 import gleam/list
 

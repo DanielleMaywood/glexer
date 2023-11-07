@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.7.0]
+
+### Fixed
+
+- Updated for Gleam v0.32.0.
+
 ## [0.6.2]
 
 ### Fixed

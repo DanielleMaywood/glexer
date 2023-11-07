@@ -1,8 +1,8 @@
 import glexer/internal/predicates
-import glexer/token.{Token}
-import gleam/iterator.{Iterator}
+import glexer/token.{type Token}
+import gleam/iterator.{type Iterator}
 import gleam/string
-import gleam/bit_string
+import gleam/bit_array
 
 pub type Position {
   Position(Int)
@@ -96,7 +96,7 @@ fn doc_comment(
 }
 
 fn byte_size(string: String) -> Int {
-  bit_string.byte_size(<<string:utf8>>)
+  bit_array.byte_size(<<string:utf8>>)
 }
 
 pub fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
