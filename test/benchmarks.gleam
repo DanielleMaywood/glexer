@@ -14,24 +14,18 @@ pub fn main() {
 
   benchmark.run(
     [
-      benchmark.Function(
-        label: "new",
-        callable: fn(src) {
-          fn() {
-            glexer.lex(glexer.new(src))
-            Nil
-          }
-        },
-      ),
-      benchmark.Function(
-        label: "old",
-        callable: fn(src) {
-          fn() {
-            glexer_old.lex(glexer_old.new(src))
-            Nil
-          }
-        },
-      ),
+      benchmark.Function(label: "new", callable: fn(src) {
+        fn() {
+          glexer.lex(glexer.new(src))
+          Nil
+        }
+      }),
+      benchmark.Function(label: "old", callable: fn(src) {
+        fn() {
+          glexer_old.lex(glexer_old.new(src))
+          Nil
+        }
+      }),
     ],
     [benchmark.Data(label: "glexer source", data: src)],
   )
