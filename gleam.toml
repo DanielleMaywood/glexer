@@ -1,14 +1,14 @@
 name = "glexer"
-version = "0.7.0"
+version = "1.0.0"
 description = "A lexer for Gleam source code"
 licenses = ["MIT"]
-gleam = ">= 0.32.0"
+gleam = ">= 1.0.0"
 repository = { type = "github", user = "DanielleMaywood", repo = "glexer" }
 
 [dependencies]
 gleam_stdlib = "~> 0.32"
 
 [dev-dependencies]
-gleeunit = "~> 0.10"
-glychee = "~> 0.2"
-simplifile = "~> 0.1"
+gleeunit = "~> 1.1"
+glychee = "~> 1.1"
+simplifile = "~> 1.7"

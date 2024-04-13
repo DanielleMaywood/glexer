@@ -5,7 +5,7 @@ import gleam/string
 import gleam/bit_array
 
 pub type Position {
-  Position(Int)
+  Position(byte_offset: Int)
 }
 
 pub opaque type Lexer {
@@ -72,20 +72,20 @@ fn doc_comment(
   content: String,
 ) -> #(Lexer, #(Token, Position)) {
   case src {
-    "\n" <> _ -> #(
-      Lexer(src, start + size),
-      #(token.CommentDoc(content), Position(start)),
-    )
-    "\r\n" <> _ -> #(
-      Lexer(src, start + size),
-      #(token.CommentDoc(content), Position(start)),
-    )
+    "\n" <> _ -> #(Lexer(src, start + size), #(
+      token.CommentDoc(content),
+      Position(start),
+    ))
+    "\r\n" <> _ -> #(Lexer(src, start + size), #(
+      token.CommentDoc(content),
+      Position(start),
+    ))
     _ -> {
       case string.pop_grapheme(src) {
-        Error(_) -> #(
-          Lexer(src, start + size),
-          #(token.CommentDoc(content), Position(start)),
-        )
+        Error(_) -> #(Lexer(src, start + size), #(
+          token.CommentDoc(content),
+          Position(start),
+        ))
         Ok(#(char, rest)) -> {
           let size = size + byte_size(char)
           doc_comment(rest, start, size, content <> char)
