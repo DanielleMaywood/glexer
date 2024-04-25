@@ -1,7 +1,7 @@
-import glexer/token
-import glexer.{Position}
 import gleeunit
 import gleeunit/should
+import glexer.{Position}
+import glexer/token
 
 pub fn main() {
   gleeunit.main()
@@ -324,6 +324,30 @@ pub fn hex_test() {
     #(token.Int("0xFFAFF3"), Position(0)),
     #(token.LeftSquare, Position(9)),
     #(token.Int("0x0123456789ABCDEF"), Position(10)),
+    #(token.RightSquare, Position(28)),
+  ])
+}
+
+pub fn hex_lowercase_test() {
+  "0xffaff3 [0x0123456789abcdef] "
+  |> glexer.new()
+  |> glexer.lex()
+  |> should.equal([
+    #(token.Int("0xffaff3"), Position(0)),
+    #(token.LeftSquare, Position(9)),
+    #(token.Int("0x0123456789abcdef"), Position(10)),
+    #(token.RightSquare, Position(28)),
+  ])
+}
+
+pub fn hex_mixed_case_test() {
+  "0xfFafF3 [0x0123456789aBcdEf] "
+  |> glexer.new()
+  |> glexer.lex()
+  |> should.equal([
+    #(token.Int("0xfFafF3"), Position(0)),
+    #(token.LeftSquare, Position(9)),
+    #(token.Int("0x0123456789aBcdEf"), Position(10)),
     #(token.RightSquare, Position(28)),
   ])
 }

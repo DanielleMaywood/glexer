@@ -1,9 +1,9 @@
 import gleam/list
 import gleam/string
-import glychee/benchmark
-import simplifile
 import glexer
 import glexer_old
+import glychee/benchmark
+import simplifile
 
 pub fn main() {
   let assert Ok(src) = simplifile.read("src/glexer.gleam")
