@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.1] - 2024-04-25
+
+### Fixed
+
+-   Support lexing lowercase hexadecimal
+
 ## [1.0.0] - 2024-04-13
 
 ### Changed
