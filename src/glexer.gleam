@@ -466,6 +466,12 @@ fn lex_hexadecimal(
     "D" <> source -> lex_hexadecimal(source, content <> "D", start)
     "E" <> source -> lex_hexadecimal(source, content <> "E", start)
     "F" <> source -> lex_hexadecimal(source, content <> "F", start)
+    "a" <> source -> lex_hexadecimal(source, content <> "a", start)
+    "b" <> source -> lex_hexadecimal(source, content <> "b", start)
+    "c" <> source -> lex_hexadecimal(source, content <> "c", start)
+    "d" <> source -> lex_hexadecimal(source, content <> "d", start)
+    "e" <> source -> lex_hexadecimal(source, content <> "e", start)
+    "f" <> source -> lex_hexadecimal(source, content <> "f", start)
     source -> {
       let lexer = Lexer(source, start + byte_size(content))
       #(lexer, #(token.Int(content), Position(start)))

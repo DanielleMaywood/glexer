@@ -328,6 +328,18 @@ pub fn hex_test() {
   ])
 }
 
+pub fn hex_lowercase_test() {
+  "0xffaff3 [0x0123456789abcdef] "
+  |> glexer.new()
+  |> glexer.lex()
+  |> should.equal([
+    #(token.Int("0xffaff3"), Position(0)),
+    #(token.LeftSquare, Position(9)),
+    #(token.Int("0x0123456789abcdef"), Position(10)),
+    #(token.RightSquare, Position(28)),
+  ])
+}
+
 pub fn binary_test() {
   "0b0101"
   |> glexer.new()
