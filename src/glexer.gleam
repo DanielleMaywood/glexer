@@ -1,8 +1,8 @@
-import glexer/internal/predicates
-import glexer/token.{type Token}
+import gleam/bit_array
 import gleam/iterator.{type Iterator}
 import gleam/string
-import gleam/bit_array
+import glexer/internal/predicates
+import glexer/token.{type Token}
 
 pub type Position {
   Position(byte_offset: Int)

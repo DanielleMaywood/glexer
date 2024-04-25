@@ -1,8 +1,8 @@
+import gleam/iterator.{type Iterator}
+import gleam/list
+import gleam/string
 import glexer/internal/predicates
 import glexer/token.{type Token}
-import gleam/iterator.{type Iterator}
-import gleam/string
-import gleam/list
 
 pub type Position {
   Position(Int)
