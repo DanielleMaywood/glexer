@@ -365,3 +365,21 @@ pub fn octal_test() {
   |> glexer.lex()
   |> should.equal([#(token.Int("0o123"), Position(0))])
 }
+
+pub fn negative_integer_test() {
+  "-123"
+  |> glexer.new()
+  |> glexer.lex()
+  |> should.equal([#(token.Int("-123"), Position(0))])
+}
+
+pub fn negative_integer_edge_case_test() {
+  "1-1"
+  |> glexer.new()
+  |> glexer.lex()
+  |> should.equal([
+    #(token.Int("1"), Position(0)),
+    #(token.Minus, Position(1)),
+    #(token.Int("1"), Position(2)),
+  ])
+}
