@@ -81,6 +81,7 @@ pub type Token {
   // Extra
   CommentNormal
   CommentModule
+  Blank(String)
   EmptyLine
 
   // Invalid code tokens

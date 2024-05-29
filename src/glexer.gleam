@@ -102,11 +102,19 @@ fn byte_size(string: String) -> Int {
 pub fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
   case lexer.source {
     // Newline
-    "\r\n" <> rest -> newline(lexer, rest, 2)
-    "\n" <> rest -> newline(lexer, rest, 1)
+    // "\r\n" <> rest -> newline(lexer, rest, 2)
+    "\r\n" <> rest -> #(
+      advance(lexer, rest, 2),
+      token(lexer, token.Blank("\r\n")),
+    )
 
-    // Whitespace
-    " " <> rest | "\t" <> rest -> next(advance(lexer, rest, 1))
+    // "\n" <> rest -> newline(lexer, rest, 1)
+    "\n" <> rest -> #(advance(lexer, rest, 1), token(lexer, token.Blank("\n")))
+
+    // // Whitespace
+    // " " <> rest | "\t" <> rest -> next(advance(lexer, rest, 1))
+    " " <> rest -> #(advance(lexer, rest, 1), token(lexer, token.Blank(" ")))
+    "\t" <> rest -> #(advance(lexer, rest, 1), token(lexer, token.Blank("\t")))
 
     // Comments
     "////" <> rest -> comment(rest, lexer.position, 4, token.CommentModule)
