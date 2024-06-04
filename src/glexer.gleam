@@ -51,44 +51,27 @@ fn comment(
   src: String,
   start: Int,
   size: Int,
-  token: Token,
-) -> #(Lexer, #(Token, Position)) {
-  case src {
-    "\n" <> _ -> #(Lexer(src, start + size), #(token, Position(start)))
-    "\r\n" <> _ -> #(Lexer(src, start + size), #(token, Position(start)))
-    _ -> {
-      case string.pop_grapheme(src) {
-        Error(_) -> #(Lexer(src, start + size), #(token, Position(start)))
-        Ok(#(char, rest)) -> comment(rest, start, size + byte_size(char), token)
-      }
-    }
-  }
-}
-
-fn doc_comment(
-  src: String,
-  start: Int,
-  size: Int,
   content: String,
+  to_token: fn(String) -> Token,
 ) -> #(Lexer, #(Token, Position)) {
   case src {
     "\n" <> _ -> #(Lexer(src, start + size), #(
-      token.CommentDoc(content),
+      to_token(content),
       Position(start),
     ))
     "\r\n" <> _ -> #(Lexer(src, start + size), #(
-      token.CommentDoc(content),
+      to_token(content),
       Position(start),
     ))
     _ -> {
       case string.pop_grapheme(src) {
         Error(_) -> #(Lexer(src, start + size), #(
-          token.CommentDoc(content),
+          to_token(content),
           Position(start),
         ))
         Ok(#(char, rest)) -> {
           let size = size + byte_size(char)
-          doc_comment(rest, start, size, content <> char)
+          comment(rest, start, size, content <> char, to_token)
         }
       }
     }
@@ -102,16 +85,24 @@ fn byte_size(string: String) -> Int {
 pub fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
   case lexer.source {
     // Newline
-    "\r\n" <> rest -> newline(lexer, rest, 2)
-    "\n" <> rest -> newline(lexer, rest, 1)
+    // "\r\n" <> rest -> newline(lexer, rest, 2)
+    "\r\n" <> rest -> #(
+      advance(lexer, rest, 2),
+      token(lexer, token.Blank("\r\n")),
+    )
 
-    // Whitespace
-    " " <> rest | "\t" <> rest -> next(advance(lexer, rest, 1))
+    // "\n" <> rest -> newline(lexer, rest, 1)
+    "\n" <> rest -> #(advance(lexer, rest, 1), token(lexer, token.Blank("\n")))
+
+    // // Whitespace
+    // " " <> rest | "\t" <> rest -> next(advance(lexer, rest, 1))
+    " " <> rest -> #(advance(lexer, rest, 1), token(lexer, token.Blank(" ")))
+    "\t" <> rest -> #(advance(lexer, rest, 1), token(lexer, token.Blank("\t")))
 
     // Comments
-    "////" <> rest -> comment(rest, lexer.position, 4, token.CommentModule)
-    "///" <> rest -> doc_comment(rest, lexer.position, 3, "")
-    "//" <> rest -> comment(rest, lexer.position, 2, token.CommentNormal)
+    "////" <> rest -> comment(rest, lexer.position, 4, "", token.CommentModule)
+    "///" <> rest -> comment(rest, lexer.position, 3, "", token.CommentDoc)
+    "//" <> rest -> comment(rest, lexer.position, 2, "", token.CommentNormal)
 
     // Groupings
     "(" <> rest -> #(advance(lexer, rest, 1), token(lexer, token.LeftParen))
