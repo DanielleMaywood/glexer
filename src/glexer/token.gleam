@@ -79,8 +79,8 @@ pub type Token {
   EndOfFile
 
   // Extra
-  CommentNormal
-  CommentModule
+  CommentNormal(String)
+  CommentModule(String)
   Blank(String)
   EmptyLine
 
