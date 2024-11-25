@@ -1,6 +1,4 @@
-import gleam/bit_array
-import gleam/bool
-import gleam/iterator.{type Iterator}
+import gleam/list
 import gleam/string
 import glexer/internal/predicates
 import glexer/token.{type Token}
@@ -9,401 +7,567 @@ pub type Position {
   Position(byte_offset: Int)
 }
 
-pub opaque type Lexer {
-  Lexer(source: String, position: Int, check_for_minus: Bool)
+pub fn lex(source: String) -> List(#(Token, Position)) {
+  let lexer =
+    Lexer(
+      source:,
+      byte_offset: 0,
+      check_for_minus: False,
+      check_for_nested_dot: False,
+      has_nested_dot: False,
+    )
+
+  do_lex(lexer, [])
+  |> list.reverse
 }
 
-pub fn new(source: String) -> Lexer {
-  Lexer(source: source, position: 0, check_for_minus: False)
+type Lexer {
+  Lexer(
+    source: String,
+    byte_offset: Int,
+    check_for_minus: Bool,
+    check_for_nested_dot: Bool,
+    has_nested_dot: Bool,
+  )
 }
 
-pub fn iterator(lexer: Lexer) -> Iterator(#(Token, Position)) {
-  use lexer <- iterator.unfold(from: lexer)
-
+fn do_lex(lexer: Lexer, tokens: List(#(Token, Position))) {
   case next(lexer) {
-    #(_lexer, #(token.EndOfFile, _position)) -> iterator.Done
-    #(lexer, token) -> iterator.Next(element: token, accumulator: lexer)
+    #(_lexer, #(token.EndOfFile, _)) -> tokens
+    #(lexer, token) -> do_lex(lexer, [token, ..tokens])
   }
 }
 
-pub fn lex(lexer: Lexer) -> List(#(Token, Position)) {
-  iterator(lexer)
-  |> iterator.to_list()
+fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
+  case lexer {
+    // Do we need to check for a minus?
+    Lexer(source: "-" as c <> source, check_for_minus: True, ..) -> {
+      let #(lexer, token) =
+        token(lexer, token.Minus)
+        |> advanced(lexer, source, string.byte_size(c))
+
+      #(Lexer(..lexer, check_for_minus: False), token)
+    }
+
+    // Do we need to check for nested dot?
+    Lexer(source: ".." as c <> source, check_for_nested_dot: True, ..) ->
+      token(lexer, token.DotDot)
+      |> advanced(lexer, source, string.byte_size(c))
+    Lexer(source: "." as c <> source, check_for_nested_dot: True, ..) -> {
+      case source {
+        "0" <> _
+        | "1" <> _
+        | "2" <> _
+        | "3" <> _
+        | "4" <> _
+        | "5" <> _
+        | "6" <> _
+        | "7" <> _
+        | "8" <> _
+        | "9" <> _ -> {
+          let token = token(lexer, token.Dot)
+          let lexer = advance(lexer, source, string.byte_size(c))
+          let lexer =
+            Lexer(..lexer, check_for_nested_dot: False, has_nested_dot: True)
+
+          #(lexer, token)
+        }
+        _ ->
+          token(lexer, token.Dot)
+          |> advanced(lexer, source, string.byte_size(c))
+      }
+    }
+
+    // Do we need to handle a nested dot?
+    Lexer(source: "0" as c <> source, byte_offset:, has_nested_dot: True, ..)
+    | Lexer(source: "1" as c <> source, byte_offset:, has_nested_dot: True, ..)
+    | Lexer(source: "2" as c <> source, byte_offset:, has_nested_dot: True, ..)
+    | Lexer(source: "3" as c <> source, byte_offset:, has_nested_dot: True, ..)
+    | Lexer(source: "4" as c <> source, byte_offset:, has_nested_dot: True, ..)
+    | Lexer(source: "5" as c <> source, byte_offset:, has_nested_dot: True, ..)
+    | Lexer(source: "6" as c <> source, byte_offset:, has_nested_dot: True, ..)
+    | Lexer(source: "7" as c <> source, byte_offset:, has_nested_dot: True, ..)
+    | Lexer(source: "8" as c <> source, byte_offset:, has_nested_dot: True, ..)
+    | Lexer(source: "9" as c <> source, byte_offset:, has_nested_dot: True, ..) -> {
+      let #(lexer, int) =
+        advance(lexer, source, string.byte_size(c))
+        |> take_while(c, predicates.is_digit)
+
+      let lexer =
+        Lexer(..lexer, has_nested_dot: False, check_for_nested_dot: True)
+
+      #(lexer, #(token.Int(int), Position(byte_offset:)))
+    }
+
+    // We want to turn-off check_for_minus check here
+    Lexer(check_for_minus: True, ..) ->
+      next(Lexer(..lexer, check_for_minus: False))
+
+    // We want to turn-off check_for_nested_dot check here
+    Lexer(check_for_nested_dot: True, ..) ->
+      next(Lexer(..lexer, check_for_nested_dot: False))
+
+    // We want to turn-off has_nested_dot check here
+    Lexer(has_nested_dot: True, ..) ->
+      next(Lexer(..lexer, has_nested_dot: False))
+
+    // Newline
+    Lexer(source: "\r\n" as c <> source, byte_offset:, ..)
+    | Lexer(source: "\n" as c <> source, byte_offset:, ..) ->
+      newline(advance(lexer, source, string.byte_size(c)), byte_offset)
+
+    // Whitespace
+    Lexer(source: " " as c <> source, ..)
+    | Lexer(source: "\t" as c <> source, ..) ->
+      next(advance(lexer, source, string.byte_size(c)))
+
+    // Comments
+    Lexer(source: "////" as c <> source, byte_offset:, ..) ->
+      advance(lexer, source, string.byte_size(c))
+      |> comment(token.CommentModule, byte_offset)
+    Lexer(source: "///" as c <> source, byte_offset:, ..) ->
+      advance(lexer, source, string.byte_size(c))
+      |> doc_comment("", byte_offset)
+    Lexer(source: "//" as c <> source, byte_offset:, ..) ->
+      advance(lexer, source, string.byte_size(c))
+      |> comment(token.CommentNormal, byte_offset)
+
+    // Groupings
+    Lexer(source: "(" as c <> source, ..) ->
+      token(lexer, token.LeftParen)
+      |> advanced(lexer, source, string.byte_size(c))
+    Lexer(source: ")" as c <> source, ..) ->
+      token(lexer, token.RightParen)
+      |> advanced(lexer, source, string.byte_size(c))
+    Lexer(source: "{" as c <> source, ..) ->
+      token(lexer, token.LeftBrace)
+      |> advanced(lexer, source, string.byte_size(c))
+    Lexer(source: "}" as c <> source, ..) ->
+      token(lexer, token.RightBrace)
+      |> advanced(lexer, source, string.byte_size(c))
+    Lexer(source: "[" as c <> source, ..) ->
+      token(lexer, token.LeftSquare)
+      |> advanced(lexer, source, string.byte_size(c))
+    Lexer(source: "]" as c <> source, ..) ->
+      token(lexer, token.RightSquare)
+      |> advanced(lexer, source, string.byte_size(c))
+
+    // Other Punctuation
+    Lexer(source: "@" as c <> source, ..) ->
+      token(lexer, token.At)
+      |> advanced(lexer, source, string.byte_size(c))
+    Lexer(source: ":" as c <> source, ..) ->
+      token(lexer, token.Colon)
+      |> advanced(lexer, source, string.byte_size(c))
+    Lexer(source: "," as c <> source, ..) ->
+      token(lexer, token.Comma)
+      |> advanced(lexer, source, string.byte_size(c))
+    Lexer(source: ".." as c <> source, ..) ->
+      token(lexer, token.DotDot)
+      |> advanced(lexer, source, string.byte_size(c))
+    Lexer(source: "." as c <> source, ..) ->
+      token(lexer, token.Dot)
+      |> advanced(lexer, source, string.byte_size(c))
+    Lexer(source: "#" as c <> source, ..) ->
+      token(lexer, token.Hash)
+      |> advanced(lexer, source, string.byte_size(c))
+    Lexer(source: "!=" as c <> source, ..) ->
+      token(lexer, token.NotEqual)
+      |> advanced(lexer, source, string.byte_size(c))
+    Lexer(source: "!" as c <> source, ..) ->
+      token(lexer, token.Bang)
+      |> advanced(lexer, source, string.byte_size(c))
+    Lexer(source: "==" as c <> source, ..) ->
+      token(lexer, token.EqualEqual)
+      |> advanced(lexer, source, string.byte_size(c))
+    Lexer(source: "=" as c <> source, ..) ->
+      token(lexer, token.Equal)
+      |> advanced(lexer, source, string.byte_size(c))
+    Lexer(source: "|>" as c <> source, ..) ->
+      token(lexer, token.Pipe)
+      |> advanced(lexer, source, string.byte_size(c))
+    Lexer(source: "||" as c <> source, ..) ->
+      token(lexer, token.VBarVBar)
+      |> advanced(lexer, source, string.byte_size(c))
+    Lexer(source: "|" as c <> source, ..) ->
+      token(lexer, token.VBar)
+      |> advanced(lexer, source, string.byte_size(c))
+    Lexer(source: "&&" as c <> source, ..) ->
+      token(lexer, token.AmperAmper)
+      |> advanced(lexer, source, string.byte_size(c))
+    Lexer(source: "<<" as c <> source, ..) ->
+      token(lexer, token.LessLess)
+      |> advanced(lexer, source, string.byte_size(c))
+    Lexer(source: ">>" as c <> source, ..) ->
+      token(lexer, token.GreaterGreater)
+      |> advanced(lexer, source, string.byte_size(c))
+    Lexer(source: "<-" as c <> source, ..) ->
+      token(lexer, token.LeftArrow)
+      |> advanced(lexer, source, string.byte_size(c))
+    Lexer(source: "->" as c <> source, ..) ->
+      token(lexer, token.RightArrow)
+      |> advanced(lexer, source, string.byte_size(c))
+
+    // String Operators
+    Lexer(source: "<>" as c <> source, ..) ->
+      token(lexer, token.LessGreater)
+      |> advanced(lexer, source, string.byte_size(c))
+
+    // Float Operators
+    Lexer(source: "+." as c <> source, ..) ->
+      token(lexer, token.PlusDot)
+      |> advanced(lexer, source, string.byte_size(c))
+    Lexer(source: "-." as c <> source, ..) ->
+      token(lexer, token.MinusDot)
+      |> advanced(lexer, source, string.byte_size(c))
+    Lexer(source: "*." as c <> source, ..) ->
+      token(lexer, token.StarDot)
+      |> advanced(lexer, source, string.byte_size(c))
+    Lexer(source: "/." as c <> source, ..) ->
+      token(lexer, token.SlashDot)
+      |> advanced(lexer, source, string.byte_size(c))
+    Lexer(source: "<=." as c <> source, ..) ->
+      token(lexer, token.LessEqualDot)
+      |> advanced(lexer, source, string.byte_size(c))
+    Lexer(source: "<." as c <> source, ..) ->
+      token(lexer, token.LessDot)
+      |> advanced(lexer, source, string.byte_size(c))
+    Lexer(source: ">=." as c <> source, ..) ->
+      token(lexer, token.GreaterEqualDot)
+      |> advanced(lexer, source, string.byte_size(c))
+    Lexer(source: ">." as c <> source, ..) ->
+      token(lexer, token.GreaterDot)
+      |> advanced(lexer, source, string.byte_size(c))
+
+    // Binary/Octal/Hexadecimal
+    Lexer(source: "0b" as c <> source, byte_offset:, ..) ->
+      advance(lexer, source, string.byte_size(c))
+      |> lex_binary(c, byte_offset)
+    Lexer(source: "0o" as c <> source, byte_offset:, ..) ->
+      advance(lexer, source, string.byte_size(c))
+      |> lex_octal(c, byte_offset)
+    Lexer(source: "0x" as c <> source, byte_offset:, ..) ->
+      advance(lexer, source, string.byte_size(c))
+      |> lex_hexadecimal(c, byte_offset)
+
+    // Decimal Numbers
+    Lexer(source: "0" as c <> source, byte_offset:, ..)
+    | Lexer(source: "1" as c <> source, byte_offset:, ..)
+    | Lexer(source: "2" as c <> source, byte_offset:, ..)
+    | Lexer(source: "3" as c <> source, byte_offset:, ..)
+    | Lexer(source: "4" as c <> source, byte_offset:, ..)
+    | Lexer(source: "5" as c <> source, byte_offset:, ..)
+    | Lexer(source: "6" as c <> source, byte_offset:, ..)
+    | Lexer(source: "7" as c <> source, byte_offset:, ..)
+    | Lexer(source: "8" as c <> source, byte_offset:, ..)
+    | Lexer(source: "9" as c <> source, byte_offset:, ..)
+    | Lexer(source: "-0" as c <> source, byte_offset:, ..)
+    | Lexer(source: "-1" as c <> source, byte_offset:, ..)
+    | Lexer(source: "-2" as c <> source, byte_offset:, ..)
+    | Lexer(source: "-3" as c <> source, byte_offset:, ..)
+    | Lexer(source: "-4" as c <> source, byte_offset:, ..)
+    | Lexer(source: "-5" as c <> source, byte_offset:, ..)
+    | Lexer(source: "-6" as c <> source, byte_offset:, ..)
+    | Lexer(source: "-7" as c <> source, byte_offset:, ..)
+    | Lexer(source: "-8" as c <> source, byte_offset:, ..)
+    | Lexer(source: "-9" as c <> source, byte_offset:, ..) -> {
+      advance(lexer, source, string.byte_size(c))
+      |> lex_number(c, LexInt, byte_offset)
+    }
+
+    // Int Operators
+    Lexer(source: "+" as c <> source, ..) ->
+      token(lexer, token.Plus)
+      |> advanced(lexer, source, string.byte_size(c))
+    Lexer(source: "-" as c <> source, ..) ->
+      token(lexer, token.Minus)
+      |> advanced(lexer, source, string.byte_size(c))
+    Lexer(source: "*" as c <> source, ..) ->
+      token(lexer, token.Star)
+      |> advanced(lexer, source, string.byte_size(c))
+    Lexer(source: "/" as c <> source, ..) ->
+      token(lexer, token.Slash)
+      |> advanced(lexer, source, string.byte_size(c))
+    Lexer(source: "<=" as c <> source, ..) ->
+      token(lexer, token.LessEqual)
+      |> advanced(lexer, source, string.byte_size(c))
+    Lexer(source: "<" as c <> source, ..) ->
+      token(lexer, token.Less)
+      |> advanced(lexer, source, string.byte_size(c))
+    Lexer(source: ">=" as c <> source, ..) ->
+      token(lexer, token.GreaterEqual)
+      |> advanced(lexer, source, string.byte_size(c))
+    Lexer(source: ">" as c <> source, ..) ->
+      token(lexer, token.Greater)
+      |> advanced(lexer, source, string.byte_size(c))
+    Lexer(source: "%" as c <> source, ..) ->
+      token(lexer, token.Percent)
+      |> advanced(lexer, source, string.byte_size(c))
+
+    // Strings
+    Lexer(source: "\"" as c <> source, byte_offset:, ..) ->
+      advance(lexer, source, string.byte_size(c))
+      |> lex_string("", byte_offset)
+
+    // Discard
+    Lexer(source: "_" as c <> source, byte_offset:, ..) -> {
+      let #(lexer, name) =
+        advance(lexer, source, string.byte_size(c))
+        |> take_while("", predicates.is_name_grapheme)
+
+      #(lexer, #(token.DiscardName(name), Position(byte_offset:)))
+    }
+
+    // Keywords & Literals (Lowercase)
+    Lexer(source: "a" as c <> source, byte_offset:, ..)
+    | Lexer(source: "b" as c <> source, byte_offset:, ..)
+    | Lexer(source: "c" as c <> source, byte_offset:, ..)
+    | Lexer(source: "d" as c <> source, byte_offset:, ..)
+    | Lexer(source: "e" as c <> source, byte_offset:, ..)
+    | Lexer(source: "f" as c <> source, byte_offset:, ..)
+    | Lexer(source: "g" as c <> source, byte_offset:, ..)
+    | Lexer(source: "h" as c <> source, byte_offset:, ..)
+    | Lexer(source: "i" as c <> source, byte_offset:, ..)
+    | Lexer(source: "j" as c <> source, byte_offset:, ..)
+    | Lexer(source: "k" as c <> source, byte_offset:, ..)
+    | Lexer(source: "l" as c <> source, byte_offset:, ..)
+    | Lexer(source: "m" as c <> source, byte_offset:, ..)
+    | Lexer(source: "n" as c <> source, byte_offset:, ..)
+    | Lexer(source: "o" as c <> source, byte_offset:, ..)
+    | Lexer(source: "p" as c <> source, byte_offset:, ..)
+    | Lexer(source: "q" as c <> source, byte_offset:, ..)
+    | Lexer(source: "r" as c <> source, byte_offset:, ..)
+    | Lexer(source: "s" as c <> source, byte_offset:, ..)
+    | Lexer(source: "t" as c <> source, byte_offset:, ..)
+    | Lexer(source: "u" as c <> source, byte_offset:, ..)
+    | Lexer(source: "v" as c <> source, byte_offset:, ..)
+    | Lexer(source: "w" as c <> source, byte_offset:, ..)
+    | Lexer(source: "x" as c <> source, byte_offset:, ..)
+    | Lexer(source: "y" as c <> source, byte_offset:, ..)
+    | Lexer(source: "z" as c <> source, byte_offset:, ..) -> {
+      let #(lexer, name) =
+        advance(lexer, source, string.byte_size(c))
+        |> take_while(c, predicates.is_name_grapheme)
+
+      let token = case name {
+        "as" -> token.As
+        "assert" -> token.Assert
+        "auto" -> token.Auto
+        "case" -> token.Case
+        "const" -> token.Const
+        "delegate" -> token.Delegate
+        "derive" -> token.Derive
+        "echo" -> token.Echo
+        "else" -> token.Else
+        "fn" -> token.Fn
+        "if" -> token.If
+        "implement" -> token.Implement
+        "import" -> token.Import
+        "let" -> token.Let
+        "macro" -> token.Macro
+        "opaque" -> token.Opaque
+        "panic" -> token.Panic
+        "pub" -> token.Pub
+        "test" -> token.Test
+        "todo" -> token.Todo
+        "type" -> token.Type
+        "use" -> token.Use
+        _name -> token.Name(name)
+      }
+
+      let lexer =
+        Lexer(..lexer, check_for_minus: True, check_for_nested_dot: True)
+
+      #(lexer, #(token, Position(byte_offset:)))
+    }
+
+    // Uppercase Name
+    Lexer(source: "A" as c <> source, byte_offset:, ..)
+    | Lexer(source: "B" as c <> source, byte_offset:, ..)
+    | Lexer(source: "C" as c <> source, byte_offset:, ..)
+    | Lexer(source: "D" as c <> source, byte_offset:, ..)
+    | Lexer(source: "E" as c <> source, byte_offset:, ..)
+    | Lexer(source: "F" as c <> source, byte_offset:, ..)
+    | Lexer(source: "G" as c <> source, byte_offset:, ..)
+    | Lexer(source: "H" as c <> source, byte_offset:, ..)
+    | Lexer(source: "I" as c <> source, byte_offset:, ..)
+    | Lexer(source: "J" as c <> source, byte_offset:, ..)
+    | Lexer(source: "K" as c <> source, byte_offset:, ..)
+    | Lexer(source: "L" as c <> source, byte_offset:, ..)
+    | Lexer(source: "M" as c <> source, byte_offset:, ..)
+    | Lexer(source: "N" as c <> source, byte_offset:, ..)
+    | Lexer(source: "O" as c <> source, byte_offset:, ..)
+    | Lexer(source: "P" as c <> source, byte_offset:, ..)
+    | Lexer(source: "Q" as c <> source, byte_offset:, ..)
+    | Lexer(source: "R" as c <> source, byte_offset:, ..)
+    | Lexer(source: "S" as c <> source, byte_offset:, ..)
+    | Lexer(source: "T" as c <> source, byte_offset:, ..)
+    | Lexer(source: "U" as c <> source, byte_offset:, ..)
+    | Lexer(source: "V" as c <> source, byte_offset:, ..)
+    | Lexer(source: "W" as c <> source, byte_offset:, ..)
+    | Lexer(source: "X" as c <> source, byte_offset:, ..)
+    | Lexer(source: "Y" as c <> source, byte_offset:, ..)
+    | Lexer(source: "Z" as c <> source, byte_offset:, ..) -> {
+      let #(lexer, name) =
+        advance(lexer, source, string.byte_size(c))
+        |> take_while(c, predicates.is_upname_grapheme)
+
+      #(lexer, #(token.UpperName(name), Position(byte_offset:)))
+    }
+
+    Lexer(source:, ..) ->
+      case string.pop_grapheme(source) {
+        // We've hit the end of the file
+        Error(_) -> #(lexer, #(token.EndOfFile, Position(lexer.byte_offset)))
+        // This grapheme was unexpected
+        Ok(#(grapheme, source)) -> {
+          token(lexer, token.UnexpectedGrapheme(grapheme))
+          |> advanced(lexer, source, string.byte_size(grapheme))
+        }
+      }
+  }
 }
 
-fn newline(lexer: Lexer, src: String, size: Int) -> #(Lexer, #(Token, Position)) {
-  let start = lexer.position
-  case consume_whitespace(Lexer(..lexer, source: src, position: start + size)) {
-    #(lexer, True) -> #(lexer, #(token.EmptyLine, Position(start)))
+fn newline(lexer: Lexer, start: Int) -> #(Lexer, #(Token, Position)) {
+  case whitespace(lexer) {
+    #(lexer, True) -> #(lexer, #(token.EmptyLine, Position(byte_offset: start)))
     #(lexer, False) -> next(lexer)
   }
 }
 
-fn consume_whitespace(lexer: Lexer) -> #(Lexer, Bool) {
-  case lexer.source {
-    "" | "\n" <> _ | "\r\n" <> _ -> #(lexer, True)
-    " " <> rest ->
-      consume_whitespace(
-        Lexer(..lexer, source: rest, position: lexer.position + 1),
-      )
-    "\t" <> rest ->
-      consume_whitespace(
-        Lexer(..lexer, source: rest, position: lexer.position + 1),
-      )
+fn whitespace(lexer: Lexer) -> #(Lexer, Bool) {
+  case lexer {
+    Lexer(source: "", ..)
+    | Lexer(source: "\n" <> _, ..)
+    | Lexer(source: "\r\n" <> _, ..) -> #(lexer, True)
+
+    Lexer(source: " " as c <> source, ..)
+    | Lexer(source: "\t" as c <> source, ..) ->
+      whitespace(advance(lexer, source, string.byte_size(c)))
+
     _ -> #(lexer, False)
   }
 }
 
 fn comment(
   lexer: Lexer,
-  src: String,
-  start: Int,
-  size: Int,
   token: Token,
+  start: Int,
 ) -> #(Lexer, #(Token, Position)) {
-  case src {
-    "\n" <> _ | "\r\n" <> _ -> #(
-      Lexer(..lexer, source: src, position: start + size),
-      #(token, Position(start)),
-    )
-    _ -> {
-      case string.pop_grapheme(src) {
-        Error(_) -> #(Lexer(..lexer, source: src, position: start + size), #(
-          token,
-          Position(start),
-        ))
-        Ok(#(char, rest)) ->
-          comment(lexer, rest, start, size + byte_size(char), token)
-      }
+  case lexer {
+    Lexer(source: "\n" <> _, ..) | Lexer(source: "\r\n" <> _, ..) -> {
+      #(lexer, #(token, Position(byte_offset: start)))
     }
+
+    Lexer(source:, ..) ->
+      case string.pop_grapheme(source) {
+        Error(_) -> #(lexer, #(token, Position(byte_offset: start)))
+        Ok(#(grapheme, source)) -> {
+          advance(lexer, source, string.byte_size(grapheme))
+          |> comment(token, start)
+        }
+      }
   }
 }
 
 fn doc_comment(
   lexer: Lexer,
-  src: String,
-  start: Int,
-  size: Int,
   content: String,
+  start: Int,
 ) -> #(Lexer, #(Token, Position)) {
-  case src {
-    "\n" <> _ | "\r\n" <> _ -> #(
-      Lexer(..lexer, source: src, position: start + size),
-      #(token.CommentDoc(content), Position(start)),
-    )
-    _ -> {
-      case string.pop_grapheme(src) {
-        Error(_) -> #(Lexer(..lexer, source: src, position: start + size), #(
+  case lexer {
+    Lexer(source: "\n" <> _, ..) | Lexer(source: "\r\n" <> _, ..) -> {
+      #(lexer, #(token.CommentDoc(content), Position(byte_offset: start)))
+    }
+
+    Lexer(source:, ..) ->
+      case string.pop_grapheme(source) {
+        Error(_) -> #(lexer, #(
           token.CommentDoc(content),
-          Position(start),
+          Position(byte_offset: start),
         ))
-        Ok(#(char, rest)) -> {
-          let size = size + byte_size(char)
-          doc_comment(lexer, rest, start, size, content <> char)
-        }
+        Ok(#(grapheme, source)) ->
+          advance(lexer, source, string.byte_size(grapheme))
+          |> doc_comment(content <> grapheme, start)
       }
-    }
   }
 }
 
-fn byte_size(string: String) -> Int {
-  bit_array.byte_size(<<string:utf8>>)
-}
-
-pub fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
-  use <- bool.lazy_guard(when: lexer.check_for_minus, return: fn() {
-    let lexer = Lexer(..lexer, check_for_minus: False)
-
-    case lexer.source {
-      "-" <> rest -> #(advance(lexer, rest, 1), token(lexer, token.Minus))
-      _ -> next(lexer)
-    }
-  })
-
-  case lexer.source {
-    // Newline
-    "\r\n" <> rest -> newline(lexer, rest, 2)
-    "\n" <> rest -> newline(lexer, rest, 1)
-
-    // Whitespace
-    " " <> rest | "\t" <> rest -> next(advance(lexer, rest, 1))
-
-    // Comments
-    "////" <> rest ->
-      comment(lexer, rest, lexer.position, 4, token.CommentModule)
-    "///" <> rest -> doc_comment(lexer, rest, lexer.position, 3, "")
-    "//" <> rest -> comment(lexer, rest, lexer.position, 2, token.CommentNormal)
-
-    // Groupings
-    "(" <> rest -> #(advance(lexer, rest, 1), token(lexer, token.LeftParen))
-    ")" <> rest -> #(advance(lexer, rest, 1), token(lexer, token.RightParen))
-    "{" <> rest -> #(advance(lexer, rest, 1), token(lexer, token.LeftBrace))
-    "}" <> rest -> #(advance(lexer, rest, 1), token(lexer, token.RightBrace))
-    "[" <> rest -> #(advance(lexer, rest, 1), token(lexer, token.LeftSquare))
-    "]" <> rest -> #(advance(lexer, rest, 1), token(lexer, token.RightSquare))
-
-    // Other Punctuation
-    "@" <> rest -> #(advance(lexer, rest, 1), token(lexer, token.At))
-    ":" <> rest -> #(advance(lexer, rest, 1), token(lexer, token.Colon))
-    "," <> rest -> #(advance(lexer, rest, 1), token(lexer, token.Comma))
-    ".." <> rest -> #(advance(lexer, rest, 2), token(lexer, token.DotDot))
-    "." <> rest -> #(advance(lexer, rest, 1), token(lexer, token.Dot))
-    "#" <> rest -> #(advance(lexer, rest, 1), token(lexer, token.Hash))
-    "!=" <> rest -> #(advance(lexer, rest, 2), token(lexer, token.NotEqual))
-    "!" <> rest -> #(advance(lexer, rest, 1), token(lexer, token.Bang))
-    "==" <> rest -> #(advance(lexer, rest, 2), token(lexer, token.EqualEqual))
-    "=" <> rest -> #(advance(lexer, rest, 1), token(lexer, token.Equal))
-    "|>" <> rest -> #(advance(lexer, rest, 2), token(lexer, token.Pipe))
-    "||" <> rest -> #(advance(lexer, rest, 2), token(lexer, token.VBarVBar))
-    "|" <> rest -> #(advance(lexer, rest, 1), token(lexer, token.VBar))
-    "&&" <> rest -> #(advance(lexer, rest, 2), token(lexer, token.AmperAmper))
-    "<<" <> rest -> #(advance(lexer, rest, 2), token(lexer, token.LessLess))
-    ">>" <> rest -> #(
-      advance(lexer, rest, 2),
-      token(lexer, token.GreaterGreater),
-    )
-    "<-" <> rest -> #(advance(lexer, rest, 2), token(lexer, token.LeftArrow))
-    "->" <> rest -> #(advance(lexer, rest, 2), token(lexer, token.RightArrow))
-
-    // String Operators
-    "<>" <> rest -> #(advance(lexer, rest, 2), token(lexer, token.LessGreater))
-
-    // Float Operators
-    "+." <> rest -> #(advance(lexer, rest, 2), token(lexer, token.PlusDot))
-    "-." <> rest -> #(advance(lexer, rest, 2), token(lexer, token.MinusDot))
-    "*." <> rest -> #(advance(lexer, rest, 2), token(lexer, token.StarDot))
-    "/." <> rest -> #(advance(lexer, rest, 2), token(lexer, token.SlashDot))
-    "<=." <> rest -> #(
-      advance(lexer, rest, 3),
-      token(lexer, token.LessEqualDot),
-    )
-    "<." <> rest -> #(advance(lexer, rest, 2), token(lexer, token.LessDot))
-    ">=." <> rest -> #(
-      advance(lexer, rest, 3),
-      token(lexer, token.GreaterEqualDot),
-    )
-    ">." <> rest -> #(advance(lexer, rest, 2), token(lexer, token.GreaterDot))
-
-    "0b" <> source -> lex_binary(lexer, source, "0b", lexer.position)
-    "0o" <> source -> lex_octal(lexer, source, "0o", lexer.position)
-    "0x" <> source -> lex_hexadecimal(lexer, source, "0x", lexer.position)
-
-    "0" <> source -> lex_number(lexer, source, "0", LexInt, lexer.position)
-    "1" <> source -> lex_number(lexer, source, "1", LexInt, lexer.position)
-    "2" <> source -> lex_number(lexer, source, "2", LexInt, lexer.position)
-    "3" <> source -> lex_number(lexer, source, "3", LexInt, lexer.position)
-    "4" <> source -> lex_number(lexer, source, "4", LexInt, lexer.position)
-    "5" <> source -> lex_number(lexer, source, "5", LexInt, lexer.position)
-    "6" <> source -> lex_number(lexer, source, "6", LexInt, lexer.position)
-    "7" <> source -> lex_number(lexer, source, "7", LexInt, lexer.position)
-    "8" <> source -> lex_number(lexer, source, "8", LexInt, lexer.position)
-    "9" <> source -> lex_number(lexer, source, "9", LexInt, lexer.position)
-    "-0" <> source -> lex_number(lexer, source, "-0", LexInt, lexer.position)
-    "-1" <> source -> lex_number(lexer, source, "-1", LexInt, lexer.position)
-    "-2" <> source -> lex_number(lexer, source, "-2", LexInt, lexer.position)
-    "-3" <> source -> lex_number(lexer, source, "-3", LexInt, lexer.position)
-    "-4" <> source -> lex_number(lexer, source, "-4", LexInt, lexer.position)
-    "-5" <> source -> lex_number(lexer, source, "-5", LexInt, lexer.position)
-    "-6" <> source -> lex_number(lexer, source, "-6", LexInt, lexer.position)
-    "-7" <> source -> lex_number(lexer, source, "-7", LexInt, lexer.position)
-    "-8" <> source -> lex_number(lexer, source, "-8", LexInt, lexer.position)
-    "-9" <> source -> lex_number(lexer, source, "-9", LexInt, lexer.position)
-
-    // Int Operators
-    "+" <> rest -> #(advance(lexer, rest, 1), token(lexer, token.Plus))
-    "-" <> rest -> #(advance(lexer, rest, 1), token(lexer, token.Minus))
-    "*" <> rest -> #(advance(lexer, rest, 1), token(lexer, token.Star))
-    "/" <> rest -> #(advance(lexer, rest, 1), token(lexer, token.Slash))
-    "<=" <> rest -> #(advance(lexer, rest, 2), token(lexer, token.LessEqual))
-    "<" <> rest -> #(advance(lexer, rest, 1), token(lexer, token.Less))
-    ">=" <> rest -> #(advance(lexer, rest, 2), token(lexer, token.GreaterEqual))
-    ">" <> rest -> #(advance(lexer, rest, 1), token(lexer, token.Greater))
-    "%" <> rest -> #(advance(lexer, rest, 1), token(lexer, token.Percent))
-
-    // Strings
-    "\"" <> rest -> lex_string(lexer, rest, "", lexer.position)
-
-    // Discard
-    "_" <> rest -> {
-      let #(name, rest) = take_content(rest, "", predicates.is_name_grapheme)
-
-      #(
-        Lexer(..lexer, source: rest, position: lexer.position + byte_size(name)),
-        token(lexer, token.DiscardName(name)),
-      )
-    }
-
-    // Keywords & Literals
-    // Lowercase Name
-    "a" <> _
-    | "b" <> _
-    | "c" <> _
-    | "d" <> _
-    | "e" <> _
-    | "f" <> _
-    | "g" <> _
-    | "h" <> _
-    | "i" <> _
-    | "j" <> _
-    | "k" <> _
-    | "l" <> _
-    | "m" <> _
-    | "n" <> _
-    | "o" <> _
-    | "p" <> _
-    | "q" <> _
-    | "r" <> _
-    | "s" <> _
-    | "t" <> _
-    | "u" <> _
-    | "v" <> _
-    | "w" <> _
-    | "x" <> _
-    | "y" <> _
-    | "z" <> _ -> {
-      let #(name, rest) =
-        take_content(lexer.source, "", predicates.is_name_grapheme)
-      let as_token = case name {
-        "assert" -> token.Assert
-        "as" -> token.As
-        "case" -> token.Case
-        "const" -> token.Const
-        "external" -> token.External
-        "fn" -> token.Fn
-        "if" -> token.If
-        "import" -> token.Import
-        "let" -> token.Let
-        "opaque" -> token.Opaque
-        "panic" -> token.Panic
-        "pub" -> token.Pub
-        "todo" -> token.Todo
-        "type" -> token.Type
-        "use" -> token.Use
-        name -> token.Name(name)
-      }
-
-      #(
-        Lexer(
-          source: rest,
-          position: lexer.position + byte_size(name),
-          check_for_minus: True,
-        ),
-        token(lexer, as_token),
-      )
-    }
-
-    // Uppercase Name
-    "A" <> _
-    | "B" <> _
-    | "C" <> _
-    | "D" <> _
-    | "E" <> _
-    | "F" <> _
-    | "G" <> _
-    | "H" <> _
-    | "I" <> _
-    | "J" <> _
-    | "K" <> _
-    | "L" <> _
-    | "M" <> _
-    | "N" <> _
-    | "O" <> _
-    | "P" <> _
-    | "Q" <> _
-    | "R" <> _
-    | "S" <> _
-    | "T" <> _
-    | "U" <> _
-    | "V" <> _
-    | "W" <> _
-    | "X" <> _
-    | "Y" <> _
-    | "Z" <> _ -> {
-      let #(name, rest) =
-        take_content(lexer.source, "", predicates.is_upname_grapheme)
-      let as_token = token.UpperName(name)
-      #(
-        Lexer(..lexer, source: rest, position: lexer.position + byte_size(name)),
-        token(lexer, as_token),
-      )
-    }
-
-    _ -> {
-      case string.pop_grapheme(lexer.source) {
-        // End Of File
-        Error(_) -> #(lexer, #(token.EndOfFile, Position(lexer.position)))
-        Ok(#(grapheme, rest)) -> {
-          let t = token.UnexpectedGrapheme(grapheme)
-          #(advance(lexer, rest, byte_size(grapheme)), token(lexer, t))
-        }
-      }
-    }
-  }
-}
-
-pub fn take_content(
-  source: String,
-  content: String,
-  predicate: fn(String) -> Bool,
-) -> #(String, String) {
-  case string.pop_grapheme(source) {
-    Error(_) -> #(content, "")
-    Ok(#(grapheme, rest)) -> {
-      case predicate(grapheme) {
-        True -> take_content(rest, content <> grapheme, predicate)
-        False -> #(content, source)
-      }
-    }
-  }
-}
-
-fn advance(lexer: Lexer, source: String, offset: Int) -> Lexer {
-  Lexer(..lexer, source: source, position: lexer.position + offset)
-}
-
-fn token(lexer: Lexer, token: Token) -> #(Token, Position) {
-  #(token, Position(lexer.position))
-}
-
-fn lex_string(
+fn lex_binary(
   lexer: Lexer,
-  input: String,
   content: String,
   start: Int,
 ) -> #(Lexer, #(Token, Position)) {
-  case input {
-    // A double quote, the string is terminated
-    "\"" <> rest -> {
-      let lexer =
-        Lexer(..lexer, source: rest, position: start + byte_size(content) + 2)
-      #(lexer, #(token.String(content), Position(start)))
-    }
+  case lexer {
+    Lexer(source: "_" as c <> source, ..)
+    | Lexer(source: "0" as c <> source, ..)
+    | Lexer(source: "1" as c <> source, ..) ->
+      advance(lexer, source, string.byte_size(c))
+      |> lex_binary(content <> c, start)
 
-    // A backslash escapes the following character
-    "\\" <> rest -> {
-      case string.pop_grapheme(rest) {
-        Error(_) -> lex_string(lexer, rest, content <> "\\", start)
-        Ok(#(g, rest)) -> lex_string(lexer, rest, content <> "\\" <> g, start)
-      }
-    }
-
-    // Any other character is content in the string
-    _ -> {
-      case string.pop_grapheme(input) {
-        Ok(#(g, rest)) -> lex_string(lexer, rest, content <> g, start)
-
-        // End of input, the string is unterminated
-        Error(_) -> {
-          let lexer =
-            Lexer(..lexer, source: "", position: start + byte_size(content) + 1)
-          #(lexer, #(token.UnterminatedString(content), Position(start)))
-        }
-      }
-    }
+    _ -> #(lexer, #(token.Int(content), Position(byte_offset: start)))
   }
 }
 
-pub type NumberLexerMode {
+fn lex_octal(
+  lexer: Lexer,
+  content: String,
+  start: Int,
+) -> #(Lexer, #(Token, Position)) {
+  case lexer {
+    Lexer(source: "_" as c <> source, ..)
+    | Lexer(source: "0" as c <> source, ..)
+    | Lexer(source: "1" as c <> source, ..)
+    | Lexer(source: "2" as c <> source, ..)
+    | Lexer(source: "3" as c <> source, ..)
+    | Lexer(source: "4" as c <> source, ..)
+    | Lexer(source: "5" as c <> source, ..)
+    | Lexer(source: "6" as c <> source, ..)
+    | Lexer(source: "7" as c <> source, ..) ->
+      advance(lexer, source, string.byte_size(c))
+      |> lex_octal(content <> c, start)
+
+    _ -> #(lexer, #(token.Int(content), Position(byte_offset: start)))
+  }
+}
+
+fn lex_hexadecimal(
+  lexer: Lexer,
+  content: String,
+  start: Int,
+) -> #(Lexer, #(Token, Position)) {
+  case lexer {
+    Lexer(source: "_" as c <> source, ..)
+    | Lexer(source: "0" as c <> source, ..)
+    | Lexer(source: "1" as c <> source, ..)
+    | Lexer(source: "2" as c <> source, ..)
+    | Lexer(source: "3" as c <> source, ..)
+    | Lexer(source: "4" as c <> source, ..)
+    | Lexer(source: "5" as c <> source, ..)
+    | Lexer(source: "6" as c <> source, ..)
+    | Lexer(source: "7" as c <> source, ..)
+    | Lexer(source: "8" as c <> source, ..)
+    | Lexer(source: "9" as c <> source, ..)
+    | Lexer(source: "a" as c <> source, ..)
+    | Lexer(source: "A" as c <> source, ..)
+    | Lexer(source: "b" as c <> source, ..)
+    | Lexer(source: "B" as c <> source, ..)
+    | Lexer(source: "c" as c <> source, ..)
+    | Lexer(source: "C" as c <> source, ..)
+    | Lexer(source: "d" as c <> source, ..)
+    | Lexer(source: "D" as c <> source, ..)
+    | Lexer(source: "e" as c <> source, ..)
+    | Lexer(source: "E" as c <> source, ..)
+    | Lexer(source: "f" as c <> source, ..)
+    | Lexer(source: "F" as c <> source, ..) ->
+      advance(lexer, source, string.byte_size(c))
+      |> lex_hexadecimal(content <> c, start)
+
+    _ -> #(lexer, #(token.Int(content), Position(byte_offset: start)))
+  }
+}
+
+type LexNumberMode {
   LexInt
   LexFloat
   LexFloatExponent
@@ -411,127 +575,122 @@ pub type NumberLexerMode {
 
 fn lex_number(
   lexer: Lexer,
-  input: String,
   content: String,
-  mode: NumberLexerMode,
+  mode: LexNumberMode,
   start: Int,
 ) -> #(Lexer, #(Token, Position)) {
-  case input {
-    // A dot, the number is a float
-    "." <> rest if mode == LexInt ->
-      lex_number(lexer, rest, content <> ".", LexFloat, start)
+  case lexer, mode {
+    Lexer(source: "_" as c <> source, ..), _
+    | Lexer(source: "0" as c <> source, ..), _
+    | Lexer(source: "1" as c <> source, ..), _
+    | Lexer(source: "2" as c <> source, ..), _
+    | Lexer(source: "3" as c <> source, ..), _
+    | Lexer(source: "4" as c <> source, ..), _
+    | Lexer(source: "5" as c <> source, ..), _
+    | Lexer(source: "6" as c <> source, ..), _
+    | Lexer(source: "7" as c <> source, ..), _
+    | Lexer(source: "8" as c <> source, ..), _
+    | Lexer(source: "9" as c <> source, ..), _
+    -> {
+      advance(lexer, source, string.byte_size(c))
+      |> lex_number(content <> c, mode, start)
+    }
 
-    "e-" <> rest if mode == LexFloat ->
-      lex_number(lexer, rest, content <> "e-", LexFloatExponent, start)
-    "e" <> rest if mode == LexFloat ->
-      lex_number(lexer, rest, content <> "e", LexFloatExponent, start)
+    Lexer(source: "." as c <> source, ..), LexInt -> {
+      advance(lexer, source, string.byte_size(c))
+      |> lex_number(content <> c, LexFloat, start)
+    }
 
-    "_" <> source -> lex_number(lexer, source, content <> "_", mode, start)
-    "0" <> source -> lex_number(lexer, source, content <> "0", mode, start)
-    "1" <> source -> lex_number(lexer, source, content <> "1", mode, start)
-    "2" <> source -> lex_number(lexer, source, content <> "2", mode, start)
-    "3" <> source -> lex_number(lexer, source, content <> "3", mode, start)
-    "4" <> source -> lex_number(lexer, source, content <> "4", mode, start)
-    "5" <> source -> lex_number(lexer, source, content <> "5", mode, start)
-    "6" <> source -> lex_number(lexer, source, content <> "6", mode, start)
-    "7" <> source -> lex_number(lexer, source, content <> "7", mode, start)
-    "8" <> source -> lex_number(lexer, source, content <> "8", mode, start)
-    "9" <> source -> lex_number(lexer, source, content <> "9", mode, start)
+    Lexer(source: "e-" as c <> source, ..), LexFloat
+    | Lexer(source: "e" as c <> source, ..), LexFloat
+    -> {
+      advance(lexer, source, string.byte_size(c))
+      |> lex_number(content <> c, LexFloatExponent, start)
+    }
 
-    // Anything else and the number is terminated
-    source -> {
-      let lexer =
-        Lexer(
-          source: source,
-          position: start + byte_size(content),
-          check_for_minus: True,
-        )
+    _, LexInt -> {
+      let lexer = Lexer(..lexer, check_for_minus: True)
+      #(lexer, #(token.Int(content), Position(byte_offset: start)))
+    }
 
-      let token = case mode {
-        LexInt -> token.Int(content)
-        LexFloat | LexFloatExponent -> token.Float(content)
+    _, LexFloat | _, LexFloatExponent -> {
+      let lexer = Lexer(..lexer, check_for_minus: True)
+      #(lexer, #(token.Float(content), Position(byte_offset: start)))
+    }
+  }
+}
+
+fn lex_string(
+  lexer: Lexer,
+  content: String,
+  start: Int,
+) -> #(Lexer, #(Token, Position)) {
+  case lexer {
+    Lexer(source: "\"" as c <> source, ..) -> {
+      #(token.String(content), Position(byte_offset: start))
+      |> advanced(lexer, source, string.byte_size(c))
+    }
+
+    Lexer(source: "\\" as c <> source, ..) ->
+      case string.pop_grapheme(source) {
+        Error(_) ->
+          advance(lexer, source, string.byte_size(c))
+          |> lex_string(content <> c, start)
+        Ok(#(grapheme, source)) -> {
+          let offset = string.byte_size(c) + string.byte_size(grapheme)
+
+          advance(lexer, source, offset)
+          |> lex_string(content <> c <> grapheme, start)
+        }
       }
-      #(lexer, #(token, Position(start)))
-    }
+
+    Lexer(source:, ..) ->
+      case string.pop_grapheme(source) {
+        Error(_) -> #(lexer, #(
+          token.UnterminatedString(content),
+          Position(byte_offset: start),
+        ))
+        Ok(#(grapheme, source)) ->
+          advance(lexer, source, string.byte_size(grapheme))
+          |> lex_string(content <> grapheme, start)
+      }
   }
 }
 
-fn lex_binary(
+// ///////////////// //
+// Utility Functions //
+// ///////////////// //
+
+fn take_while(
   lexer: Lexer,
-  source: String,
   content: String,
-  start: Int,
-) -> #(Lexer, #(Token, Position)) {
-  case source {
-    "_" <> source -> lex_binary(lexer, source, content <> "_", start)
-    "0" <> source -> lex_binary(lexer, source, content <> "0", start)
-    "1" <> source -> lex_binary(lexer, source, content <> "1", start)
-    source -> {
-      let lexer =
-        Lexer(..lexer, source: source, position: start + byte_size(content))
-      #(lexer, #(token.Int(content), Position(start)))
-    }
+  predicate: fn(String) -> Bool,
+) -> #(Lexer, String) {
+  case string.pop_grapheme(lexer.source) {
+    Error(_) -> #(lexer, content)
+    Ok(#(grapheme, source)) ->
+      case predicate(grapheme) {
+        True ->
+          advance(lexer, source, string.byte_size(grapheme))
+          |> take_while(content <> grapheme, predicate)
+        False -> #(lexer, content)
+      }
   }
 }
 
-fn lex_octal(
-  lexer: Lexer,
-  source: String,
-  content: String,
-  start: Int,
-) -> #(Lexer, #(Token, Position)) {
-  case source {
-    "_" <> source -> lex_octal(lexer, source, content <> "_", start)
-    "0" <> source -> lex_octal(lexer, source, content <> "0", start)
-    "1" <> source -> lex_octal(lexer, source, content <> "1", start)
-    "2" <> source -> lex_octal(lexer, source, content <> "2", start)
-    "3" <> source -> lex_octal(lexer, source, content <> "3", start)
-    "4" <> source -> lex_octal(lexer, source, content <> "4", start)
-    "5" <> source -> lex_octal(lexer, source, content <> "5", start)
-    "6" <> source -> lex_octal(lexer, source, content <> "6", start)
-    "7" <> source -> lex_octal(lexer, source, content <> "7", start)
-    source -> {
-      let lexer =
-        Lexer(..lexer, source: source, position: start + byte_size(content))
-      #(lexer, #(token.Int(content), Position(start)))
-    }
-  }
+fn advance(lexer: Lexer, source: String, offset: Int) -> Lexer {
+  Lexer(..lexer, source:, byte_offset: lexer.byte_offset + offset)
 }
 
-fn lex_hexadecimal(
+fn token(lexer: Lexer, token: Token) -> #(Token, Position) {
+  #(token, Position(byte_offset: lexer.byte_offset))
+}
+
+fn advanced(
+  token: #(Token, Position),
   lexer: Lexer,
   source: String,
-  content: String,
-  start: Int,
+  offset: Int,
 ) -> #(Lexer, #(Token, Position)) {
-  case source {
-    "_" <> source -> lex_hexadecimal(lexer, source, content <> "_", start)
-    "0" <> source -> lex_hexadecimal(lexer, source, content <> "0", start)
-    "1" <> source -> lex_hexadecimal(lexer, source, content <> "1", start)
-    "2" <> source -> lex_hexadecimal(lexer, source, content <> "2", start)
-    "3" <> source -> lex_hexadecimal(lexer, source, content <> "3", start)
-    "4" <> source -> lex_hexadecimal(lexer, source, content <> "4", start)
-    "5" <> source -> lex_hexadecimal(lexer, source, content <> "5", start)
-    "6" <> source -> lex_hexadecimal(lexer, source, content <> "6", start)
-    "7" <> source -> lex_hexadecimal(lexer, source, content <> "7", start)
-    "8" <> source -> lex_hexadecimal(lexer, source, content <> "8", start)
-    "9" <> source -> lex_hexadecimal(lexer, source, content <> "9", start)
-    "A" <> source -> lex_hexadecimal(lexer, source, content <> "A", start)
-    "B" <> source -> lex_hexadecimal(lexer, source, content <> "B", start)
-    "C" <> source -> lex_hexadecimal(lexer, source, content <> "C", start)
-    "D" <> source -> lex_hexadecimal(lexer, source, content <> "D", start)
-    "E" <> source -> lex_hexadecimal(lexer, source, content <> "E", start)
-    "F" <> source -> lex_hexadecimal(lexer, source, content <> "F", start)
-    "a" <> source -> lex_hexadecimal(lexer, source, content <> "a", start)
-    "b" <> source -> lex_hexadecimal(lexer, source, content <> "b", start)
-    "c" <> source -> lex_hexadecimal(lexer, source, content <> "c", start)
-    "d" <> source -> lex_hexadecimal(lexer, source, content <> "d", start)
-    "e" <> source -> lex_hexadecimal(lexer, source, content <> "e", start)
-    "f" <> source -> lex_hexadecimal(lexer, source, content <> "f", start)
-    source -> {
-      let lexer =
-        Lexer(..lexer, source: source, position: start + byte_size(content))
-      #(lexer, #(token.Int(content), Position(start)))
-    }
-  }
+  #(advance(lexer, source, offset), token)
 }

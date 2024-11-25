@@ -1,3 +1,10 @@
+pub fn is_digit(grapheme: String) -> Bool {
+  case grapheme {
+    "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" -> True
+    _ -> False
+  }
+}
+
 pub fn is_name_grapheme(grapheme: String) -> Bool {
   case grapheme {
     "a"

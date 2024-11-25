@@ -11,16 +11,23 @@ pub type Token {
   // Keywords
   As
   Assert
+  Auto
   Case
   Const
-  External
+  Delegate
+  Derive
+  Echo
+  Else
   Fn
   If
+  Implement
   Import
   Let
+  Macro
   Opaque
   Panic
   Pub
+  Test
   Todo
   Type
   Use
