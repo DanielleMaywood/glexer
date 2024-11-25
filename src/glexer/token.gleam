@@ -7,6 +7,8 @@ pub type Token {
   Float(String)
   String(String)
   CommentDoc(String)
+  CommentNormal(String)
+  CommentModule(String)
 
   // Keywords
   As
@@ -86,9 +88,7 @@ pub type Token {
   EndOfFile
 
   // Extra
-  CommentNormal
-  CommentModule
-  EmptyLine
+  Space(String)
 
   // Invalid code tokens
   UnterminatedString(String)

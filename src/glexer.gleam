@@ -3,32 +3,39 @@ import gleam/string
 import glexer/internal/predicates
 import glexer/token.{type Token}
 
-pub type Position {
-  Position(byte_offset: Int)
-}
-
-pub fn lex(source: String) -> List(#(Token, Position)) {
-  let lexer =
-    Lexer(
-      source:,
-      byte_offset: 0,
-      check_for_minus: False,
-      check_for_nested_dot: False,
-      has_nested_dot: False,
-    )
-
-  do_lex(lexer, [])
-  |> list.reverse
-}
-
-type Lexer {
+pub opaque type Lexer {
   Lexer(
     source: String,
     byte_offset: Int,
+    preserve_whitespace: Bool,
     check_for_minus: Bool,
     check_for_nested_dot: Bool,
     has_nested_dot: Bool,
   )
+}
+
+pub type Position {
+  Position(byte_offset: Int)
+}
+
+pub fn new(source: String) -> Lexer {
+  Lexer(
+    source:,
+    byte_offset: 0,
+    preserve_whitespace: False,
+    check_for_minus: False,
+    check_for_nested_dot: False,
+    has_nested_dot: False,
+  )
+}
+
+pub fn preserve_whitespace(lexer: Lexer) -> Lexer {
+  Lexer(..lexer, preserve_whitespace: True)
+}
+
+pub fn lex(lexer: Lexer) -> List(#(Token, Position)) {
+  do_lex(lexer, [])
+  |> list.reverse
 }
 
 fn do_lex(lexer: Lexer, tokens: List(#(Token, Position))) {
@@ -113,26 +120,24 @@ fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
     Lexer(has_nested_dot: True, ..) ->
       next(Lexer(..lexer, has_nested_dot: False))
 
-    // Newline
-    Lexer(source: "\r\n" as c <> source, byte_offset:, ..)
-    | Lexer(source: "\n" as c <> source, byte_offset:, ..) ->
-      newline(advance(lexer, source, string.byte_size(c)), byte_offset)
-
     // Whitespace
-    Lexer(source: " " as c <> source, ..)
-    | Lexer(source: "\t" as c <> source, ..) ->
-      next(advance(lexer, source, string.byte_size(c)))
+    Lexer(source: "\r" as c <> source, byte_offset:, ..)
+    | Lexer(source: "\n" as c <> source, byte_offset:, ..)
+    | Lexer(source: " " as c <> source, byte_offset:, ..)
+    | Lexer(source: "\t" as c <> source, byte_offset:, ..) ->
+      advance(lexer, source, string.byte_size(c))
+      |> whitespace(c, byte_offset)
 
     // Comments
     Lexer(source: "////" as c <> source, byte_offset:, ..) ->
       advance(lexer, source, string.byte_size(c))
-      |> comment(token.CommentModule, byte_offset)
+      |> comment(token.CommentModule, "", byte_offset)
     Lexer(source: "///" as c <> source, byte_offset:, ..) ->
       advance(lexer, source, string.byte_size(c))
-      |> doc_comment("", byte_offset)
+      |> comment(token.CommentDoc, "", byte_offset)
     Lexer(source: "//" as c <> source, byte_offset:, ..) ->
       advance(lexer, source, string.byte_size(c))
-      |> comment(token.CommentNormal, byte_offset)
+      |> comment(token.CommentNormal, "", byte_offset)
 
     // Groupings
     Lexer(source: "(" as c <> source, ..) ->
@@ -430,67 +435,44 @@ fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
   }
 }
 
-fn newline(lexer: Lexer, start: Int) -> #(Lexer, #(Token, Position)) {
-  case whitespace(lexer) {
-    #(lexer, True) -> #(lexer, #(token.EmptyLine, Position(byte_offset: start)))
-    #(lexer, False) -> next(lexer)
-  }
-}
-
-fn whitespace(lexer: Lexer) -> #(Lexer, Bool) {
-  case lexer {
-    Lexer(source: "", ..)
-    | Lexer(source: "\n" <> _, ..)
-    | Lexer(source: "\r\n" <> _, ..) -> #(lexer, True)
-
-    Lexer(source: " " as c <> source, ..)
-    | Lexer(source: "\t" as c <> source, ..) ->
-      whitespace(advance(lexer, source, string.byte_size(c)))
-
-    _ -> #(lexer, False)
-  }
-}
-
-fn comment(
-  lexer: Lexer,
-  token: Token,
-  start: Int,
-) -> #(Lexer, #(Token, Position)) {
-  case lexer {
-    Lexer(source: "\n" <> _, ..) | Lexer(source: "\r\n" <> _, ..) -> {
-      #(lexer, #(token, Position(byte_offset: start)))
-    }
-
-    Lexer(source:, ..) ->
-      case string.pop_grapheme(source) {
-        Error(_) -> #(lexer, #(token, Position(byte_offset: start)))
-        Ok(#(grapheme, source)) -> {
-          advance(lexer, source, string.byte_size(grapheme))
-          |> comment(token, start)
-        }
-      }
-  }
-}
-
-fn doc_comment(
+fn whitespace(
   lexer: Lexer,
   content: String,
   start: Int,
 ) -> #(Lexer, #(Token, Position)) {
   case lexer {
+    Lexer(source: " " as c <> source, ..)
+    | Lexer(source: "\t" as c <> source, ..)
+    | Lexer(source: "\n" as c <> source, ..)
+    | Lexer(source: "\r" as c <> source, ..) ->
+      advance(lexer, source, string.byte_size(c))
+      |> whitespace(content <> c, start)
+
+    Lexer(preserve_whitespace: False, ..) -> next(lexer)
+    Lexer(preserve_whitespace: True, ..) -> {
+      #(lexer, #(token.Space(content), Position(byte_offset: start)))
+    }
+  }
+}
+
+fn comment(
+  lexer: Lexer,
+  token: fn(String) -> Token,
+  content: String,
+  start: Int,
+) -> #(Lexer, #(Token, Position)) {
+  case lexer {
     Lexer(source: "\n" <> _, ..) | Lexer(source: "\r\n" <> _, ..) -> {
-      #(lexer, #(token.CommentDoc(content), Position(byte_offset: start)))
+      #(lexer, #(token(content), Position(byte_offset: start)))
     }
 
     Lexer(source:, ..) ->
       case string.pop_grapheme(source) {
-        Error(_) -> #(lexer, #(
-          token.CommentDoc(content),
-          Position(byte_offset: start),
-        ))
-        Ok(#(grapheme, source)) ->
+        Error(_) -> #(lexer, #(token(content), Position(byte_offset: start)))
+        Ok(#(grapheme, source)) -> {
           advance(lexer, source, string.byte_size(grapheme))
-          |> doc_comment(content <> grapheme, start)
+          |> comment(token, content <> grapheme, start)
+        }
       }
   }
 }
