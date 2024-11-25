@@ -65,8 +65,10 @@ fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
         | "7" <> _
         | "8" <> _
         | "9" <> _ -> {
-          let token = token(lexer, token.Dot)
-          let lexer = advance(lexer, source, string.byte_size(c))
+          let #(lexer, token) =
+            token(lexer, token.Dot)
+            |> advanced(lexer, source, string.byte_size(c))
+
           let lexer =
             Lexer(..lexer, check_for_nested_dot: False, has_nested_dot: True)
 

@@ -104,11 +104,7 @@ pub fn can_lex_keywords_test() {
 }
 
 pub fn can_lex_empty_lines_test() {
-  ".
-    
-    .
-    
-    "
+  ".\n\n        .\n    \n"
   |> glexer.lex()
   |> should.equal([
     #(token.Dot, Position(0)),
