@@ -1,23 +1,52 @@
 name: test
 
 on:
-    push:
-        branches:
-            - master
-            - main
-    pull_request:
+  push:
+    branches:
+      - master
+      - main
+  pull_request:
 
 jobs:
-    test:
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v4
-            - uses: erlef/setup-beam@v1
-              with:
-                  otp-version: "26.0.2"
-                  gleam-version: "1.4.0"
-                  rebar3-version: "3"
-                  elixir-version: "1.15.4"
-            - run: gleam deps download
-            - run: gleam test
-            - run: gleam format --check src test
+  formatted:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "27"
+          gleam-version: latest
+      - run: gleam format --check src test
+
+  test-erlang:
+    strategy:
+      matrix:
+        otp-version: ["26", "27"]
+        gleam-version: ["1.4", "1.5", "1.6"]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ matrix.otp-version }}
+          gleam-version: ${{ matrix.gleam-version }}
+      - run: gleam deps download
+      - run: gleam test --target erlang
+
+  test-node:
+    strategy:
+      matrix:
+        gleam-version: ["1.4", "1.5", "1.6"]
+        node-version: ["22", "23", "24"]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: 27
+          gleam-version: ${{ matrix.gleam-version }}
+      - uses: actions/setup-node@v2
+        with:
+          node-version: ${{ matrix.node-version }}
+      - run: gleam deps download
+      - run: gleam test --target javascript --runtime node
