@@ -7,20 +7,29 @@ pub type Token {
   Float(String)
   String(String)
   CommentDoc(String)
+  CommentNormal(String)
+  CommentModule(String)
 
   // Keywords
   As
   Assert
+  Auto
   Case
   Const
-  External
+  Delegate
+  Derive
+  Echo
+  Else
   Fn
   If
+  Implement
   Import
   Let
+  Macro
   Opaque
   Panic
   Pub
+  Test
   Todo
   Type
   Use
@@ -79,9 +88,7 @@ pub type Token {
   EndOfFile
 
   // Extra
-  CommentNormal
-  CommentModule
-  EmptyLine
+  Space(String)
 
   // Invalid code tokens
   UnterminatedString(String)
