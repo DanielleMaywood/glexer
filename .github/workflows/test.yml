@@ -72,7 +72,7 @@ jobs:
   test-bun:
     strategy:
       matrix:
-        bun-version: ["1.x.x"]
+        bun-version: ["latest"]
         gleam-version: ["1.4", "1.5", "1.6"]
     runs-on: ubuntu-latest
     steps:
