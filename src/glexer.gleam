@@ -1,4 +1,6 @@
+import gleam/int
 import gleam/list
+import gleam/result
 import gleam/string
 import glexer/internal/predicates
 import glexer/token.{type Token}
@@ -593,6 +595,62 @@ fn lex_string(
           advance(lexer, source, string.byte_size(grapheme))
           |> lex_string(content <> grapheme, start)
       }
+  }
+}
+
+/// Convert the value of a string token to the string it represents.
+/// 
+/// This function can fail if the original string contains invalid escape sequences.
+/// 
+/// ```gleam
+/// unescape_string("\\\"X\\\" marks the spot")
+/// // --> Ok("\"X\" marks the spot")
+/// 
+/// unescape_string("\\u{1F600}")
+/// // --> Ok("😀")
+/// 
+/// unescape_string("\\x")
+/// // --> Error(Nil)
+/// ```
+/// 
+pub fn unescape_string(string: String) -> Result(String, Nil) {
+  unescape_loop(string, "")
+}
+
+fn unescape_loop(escaped: String, unescaped: String) -> Result(String, Nil) {
+  case escaped {
+    "\\\"" <> escaped -> unescape_loop(escaped, unescaped <> "\"")
+    "\\\\" <> escaped -> unescape_loop(escaped, unescaped <> "\\")
+    "\\f" <> escaped -> unescape_loop(escaped, unescaped <> "\f")
+    "\\n" <> escaped -> unescape_loop(escaped, unescaped <> "\n")
+    "\\r" <> escaped -> unescape_loop(escaped, unescaped <> "\r")
+    "\\t" <> escaped -> unescape_loop(escaped, unescaped <> "\t")
+    "\\u{" <> escaped -> unescape_codepoint(escaped, unescaped, "")
+    "\\" <> _ -> Error(Nil)
+    _ ->
+      case string.pop_grapheme(escaped) {
+        Error(_) -> Ok(unescaped)
+        Ok(#(grapheme, escaped)) ->
+          unescape_loop(escaped, unescaped <> grapheme)
+      }
+  }
+}
+
+fn unescape_codepoint(
+  escaped: String,
+  unescaped: String,
+  codepoint: String,
+) -> Result(String, Nil) {
+  case string.pop_grapheme(escaped) {
+    Ok(#("}", escaped)) -> {
+      use codepoint <- result.try(int.base_parse(codepoint, 16))
+      use codepoint <- result.try(string.utf_codepoint(codepoint))
+      let codepoint = string.from_utf_codepoints([codepoint])
+      unescape_loop(escaped, unescaped <> codepoint)
+    }
+
+    Ok(#(c, escaped)) -> unescape_codepoint(escaped, unescaped, codepoint <> c)
+    Error(Nil) -> Error(Nil)
   }
 }
 
