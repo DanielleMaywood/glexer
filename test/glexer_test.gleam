@@ -1,3 +1,4 @@
+import gleam/string
 import gleeunit
 import gleeunit/should
 import glexer.{Position}
@@ -452,4 +453,28 @@ pub fn add(lhs: Int, rhs: Int) -> Int {
     #(token.RightBrace, Position(53)),
     #(token.Space("\n"), Position(54)),
   ])
+}
+
+pub fn unescape_test() {
+  "\\\"x\\\" marks the spot"
+  |> glexer.unescape_string
+  |> should.be_ok
+  |> should.equal("\"x\" marks the spot")
+
+  "\\u{1F600}"
+  |> glexer.unescape_string
+  |> should.be_ok
+  |> should.equal("\u{1f600}")
+
+  "\\x"
+  |> glexer.unescape_string
+  |> should.be_error
+}
+
+pub fn unescape_roundtrip_test() {
+  let str = "\"\\\r\n\f\t"
+  string.inspect(str)
+  |> glexer.unescape_string
+  |> should.be_ok
+  |> should.equal("\"" <> str <> "\"")
 }
