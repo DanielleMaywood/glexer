@@ -596,6 +596,13 @@ fn lex_string(
   }
 }
 
+/// Turn a sequence o tokens back to their Gleam source code representation.
+///
+pub fn to_source(tokens: List(#(Token, Position))) -> String {
+  use source, #(tok, _) <- list.fold(tokens, "")
+  source <> token.to_source(tok)
+}
+
 // ///////////////// //
 // Utility Functions //
 // ///////////////// //
