@@ -83,7 +83,6 @@ fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
       }
 
     HasNestedDot ->
-      // TODO)) use custom take number function!
       case lexer.source {
         "0" <> source
         | "1" <> source
@@ -101,7 +100,6 @@ fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
             |> lex_digits(byte_offset, 1)
 
           let lexer = Lexer(..lexer, mode: CheckForNestedDot)
-
           #(lexer, #(token.Int(int), Position(byte_offset:)))
         }
 
@@ -220,7 +218,8 @@ fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
 
         // Strings
         "\"" <> source ->
-          advance(lexer, source, 1) |> lex_string("", lexer.byte_offset)
+          advance(lexer, source, 1)
+          |> lex_string(lexer.byte_offset, 0)
 
         // Discard
         "_" <> source -> {
@@ -728,35 +727,44 @@ fn lex_number(
 
 fn lex_string(
   lexer: Lexer,
-  content: String,
   start: Int,
+  slice_size: Int,
 ) -> #(Lexer, #(Token, Position)) {
   case lexer.source {
     "\"" <> source -> {
+      let content = slice_bytes(lexer.original_source, start + 1, slice_size)
       #(token.String(content), Position(byte_offset: start))
       |> advanced(lexer, source, 1)
     }
 
-    "\\" as c <> source ->
+    "\\" <> source ->
       case string.pop_grapheme(source) {
-        Error(_) -> advance(lexer, source, 1) |> lex_string(content <> c, start)
+        Error(_) ->
+          advance(lexer, source, 1)
+          |> lex_string(start, slice_size + 1)
+
         Ok(#(grapheme, source)) -> {
           let offset = 1 + string.byte_size(grapheme)
-
           advance(lexer, source, offset)
-          |> lex_string(content <> c <> grapheme, start)
+          |> lex_string(start, slice_size + offset)
         }
       }
 
     _ ->
       case string.pop_grapheme(lexer.source) {
-        Error(_) -> #(lexer, #(
-          token.UnterminatedString(content),
-          Position(byte_offset: start),
-        ))
-        Ok(#(grapheme, source)) ->
-          advance(lexer, source, string.byte_size(grapheme))
-          |> lex_string(content <> grapheme, start)
+        Error(_) -> {
+          let content =
+            slice_bytes(lexer.original_source, start + 1, slice_size)
+          #(lexer, #(
+            token.UnterminatedString(content),
+            Position(byte_offset: start),
+          ))
+        }
+        Ok(#(grapheme, source)) -> {
+          let grapheme_size = string.byte_size(grapheme)
+          advance(lexer, source, grapheme_size)
+          |> lex_string(start, slice_size + grapheme_size)
+        }
       }
   }
 }
@@ -827,23 +835,6 @@ pub fn to_source(tokens: List(#(Token, Position))) -> String {
 // ///////////////// //
 // Utility Functions //
 // ///////////////// //
-
-fn take_while(
-  lexer: Lexer,
-  content: String,
-  predicate: fn(String) -> Bool,
-) -> #(Lexer, String) {
-  case string.pop_grapheme(lexer.source) {
-    Error(_) -> #(lexer, content)
-    Ok(#(grapheme, source)) ->
-      case predicate(grapheme) {
-        True ->
-          advance(lexer, source, string.byte_size(grapheme))
-          |> take_while(content <> grapheme, predicate)
-        False -> #(lexer, content)
-      }
-  }
-}
 
 fn advance(lexer: Lexer, source: String, offset: Int) -> Lexer {
   Lexer(..lexer, source:, byte_offset: lexer.byte_offset + offset)
