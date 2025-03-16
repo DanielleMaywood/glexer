@@ -6,7 +6,11 @@ import glexer/token.{type Token}
 
 pub opaque type Lexer {
   Lexer(
+    /// The original source code being lexed, it remains the same throughout the
+    /// entire lexing process and we use it to take slices out of it.
     original_source: String,
+    /// The source code that is pattern matched on and consumed as we lex the
+    /// code. We know we're done once this is consumed down to the empty string.
     source: String,
     byte_offset: Int,
     preserve_whitespace: Bool,
@@ -581,7 +585,16 @@ fn whitespace(
 
 /// Ignores the rest of the line until it finds a newline, and returns the next
 /// token.
+///
 fn skip_comment(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
+  // Here we're dropping bytes until we get to a `\n` or `\r\n` character.
+  // While dropping bytes we might end up with a string that is not UTF8
+  // encoded. But we know, after finding a newline character we're back to
+  // dealing with a regular UTF8 string and can safely keep going.
+  //
+  // So the trick is the byte dropping is well confined in this loop that
+  // only ever ends after we're back in valid string territory. The same goes
+  // for other functions like `comment` and `lex_string`!
   case lexer.source {
     "\n" <> _ | "\r\n" <> _ -> next(lexer)
     _ -> skip_comment(advance(lexer, drop_byte(lexer.source), 1))
@@ -881,10 +894,21 @@ fn token(lexer: Lexer, token: Token, source: String, offset: Int) {
 // FFI String functions //
 // //////////////////// //
 
+/// > 🚨 Beware that this is tricking Gleam's type system! There's no guarantee
+/// > that taking a slice from an arbitrary byte index would result in a valid
+/// > UTF8 String. The way this function is used we should only ever take
+/// > valid slices though.
+///
 @external(erlang, "binary", "part")
 @external(javascript, "./glexer.ffi.mjs", "slice_bytes")
 fn slice_bytes(string: String, from byte: Int, sized bytes: Int) -> String
 
+/// > 🚨 Beware that this is tricking Gleam's type system! There's no guarantee
+/// > that after dropping a singly byte off of a string we're still left with a
+/// > valid UTF8 String! However, we use this to drop bytes until we find some
+/// > specific characters (like `\n` or `\"`) and know we're back to dealing
+/// > with a valid UTF8 string.
+///
 @external(erlang, "glexer_ffi", "drop_byte")
 @external(javascript, "./glexer.ffi.mjs", "drop_byte")
 fn drop_byte(string: String) -> String
