@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.2.0] - 2025-03-16
+
+-   Improve performance
+
 ## [1.0.1] - 2024-04-25
 
 ### Fixed
