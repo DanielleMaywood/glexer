@@ -58,6 +58,12 @@ fn do_lex(lexer: Lexer, tokens: List(#(Token, Position))) {
   }
 }
 
+type CommentKind {
+  RegularComment
+  DocComment
+  ModuleComment
+}
+
 fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
   case lexer.mode {
     CheckForMinus ->
@@ -115,14 +121,28 @@ fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
 
         // Comments
         "////" <> source ->
-          advance(lexer, source, 4)
-          |> comment(token.CommentModule, "", lexer.byte_offset)
+          case lexer.preserve_comments {
+            False -> skip_comment(lexer)
+            True ->
+              advance(lexer, source, 4)
+              |> comment(ModuleComment, lexer.byte_offset, 0)
+          }
+
         "///" <> source ->
-          advance(lexer, source, 3)
-          |> comment(token.CommentDoc, "", lexer.byte_offset)
+          case lexer.preserve_comments {
+            False -> skip_comment(lexer)
+            True ->
+              advance(lexer, source, 3)
+              |> comment(DocComment, lexer.byte_offset, 0)
+          }
+
         "//" <> source ->
-          advance(lexer, source, 2)
-          |> comment(token.CommentNormal, "", lexer.byte_offset)
+          case lexer.preserve_comments {
+            False -> skip_comment(lexer)
+            True ->
+              advance(lexer, source, 2)
+              |> comment(RegularComment, lexer.byte_offset, 0)
+          }
 
         // Groupings
         "(" <> source -> token(lexer, token.LeftParen, source, 1)
@@ -559,31 +579,39 @@ fn whitespace(
   }
 }
 
+/// Ignores the rest of the line until it finds a newline, and returns the next
+/// token.
+fn skip_comment(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
+  case lexer.source {
+    "\n" <> _ | "\r\n" <> _ -> next(lexer)
+    _ -> skip_comment(advance(lexer, drop_byte(lexer.source), 1))
+  }
+}
+
 fn comment(
   lexer: Lexer,
-  token: fn(String) -> Token,
-  content: String,
+  kind: CommentKind,
   start: Int,
+  slice_size: Int,
 ) -> #(Lexer, #(Token, Position)) {
   case lexer.source {
-    "\n" <> _ | "\r\n" <> _ ->
-      case lexer.preserve_comments {
-        True -> #(lexer, #(token(content), Position(byte_offset: start)))
-        False -> next(lexer)
+    "\n" <> _ | "\r\n" <> _ | "" -> {
+      let source = lexer.original_source
+      let token = case kind {
+        ModuleComment ->
+          token.CommentModule(slice_bytes(source, start + 4, slice_size))
+        DocComment ->
+          token.CommentDoc(slice_bytes(source, start + 3, slice_size))
+        RegularComment ->
+          token.CommentNormal(slice_bytes(source, start + 2, slice_size))
       }
 
+      #(lexer, #(token, Position(byte_offset: start)))
+    }
+
     _ ->
-      case string.pop_grapheme(lexer.source) {
-        Error(_) ->
-          case lexer.preserve_comments {
-            True -> #(lexer, #(token(content), Position(byte_offset: start)))
-            False -> next(lexer)
-          }
-        Ok(#(grapheme, source)) -> {
-          advance(lexer, source, string.byte_size(grapheme))
-          |> comment(token, content <> grapheme, start)
-        }
-      }
+      advance(lexer, drop_byte(lexer.source), 1)
+      |> comment(kind, start, slice_size + 1)
   }
 }
 
@@ -750,22 +778,17 @@ fn lex_string(
         }
       }
 
+    "" -> {
+      let content = slice_bytes(lexer.original_source, start + 1, slice_size)
+      #(lexer, #(
+        token.UnterminatedString(content),
+        Position(byte_offset: start),
+      ))
+    }
+
     _ ->
-      case string.pop_grapheme(lexer.source) {
-        Error(_) -> {
-          let content =
-            slice_bytes(lexer.original_source, start + 1, slice_size)
-          #(lexer, #(
-            token.UnterminatedString(content),
-            Position(byte_offset: start),
-          ))
-        }
-        Ok(#(grapheme, source)) -> {
-          let grapheme_size = string.byte_size(grapheme)
-          advance(lexer, source, grapheme_size)
-          |> lex_string(start, slice_size + grapheme_size)
-        }
-      }
+      advance(lexer, drop_byte(lexer.source), 1)
+      |> lex_string(start, slice_size + 1)
   }
 }
 
@@ -861,3 +884,7 @@ fn token(lexer: Lexer, token: Token, source: String, offset: Int) {
 @external(erlang, "binary", "part")
 @external(javascript, "./glexer.ffi.mjs", "slice_bytes")
 fn slice_bytes(string: String, from byte: Int, sized bytes: Int) -> String
+
+@external(erlang, "glexer_ffi", "drop_byte")
+@external(javascript, "./glexer.ffi.mjs", "drop_byte")
+fn drop_byte(string: String) -> String
