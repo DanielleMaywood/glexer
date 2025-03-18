@@ -596,7 +596,7 @@ fn skip_comment(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
   // only ever ends after we're back in valid string territory. The same goes
   // for other functions like `comment` and `lex_string`!
   case lexer.source {
-    "\n" <> _ | "\r\n" <> _ -> next(lexer)
+    "" | "\n" <> _ | "\r\n" <> _ -> next(lexer)
     _ -> skip_comment(advance(lexer, drop_byte(lexer.source), 1))
   }
 }
