@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [2.2.1] - 2025-03-18
 
 -   Fix issue when skipping a comment without a proceeding newline
 

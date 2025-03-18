@@ -1,5 +1,5 @@
 name = "glexer"
-version = "2.2.0"
+version = "2.2.1"
 description = "A lexer for Gleam source code"
 licenses = ["MIT"]
 gleam = ">= 1.4.0"
