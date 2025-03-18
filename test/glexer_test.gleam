@@ -478,3 +478,11 @@ pub fn unescape_roundtrip_test() {
   |> should.be_ok
   |> should.equal("\"" <> str <> "\"")
 }
+
+pub fn github_issue_25_test() {
+  "// eof"
+  |> glexer.new()
+  |> glexer.discard_whitespace
+  |> glexer.discard_comments
+  |> glexer.lex()
+}
