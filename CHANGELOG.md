@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+-   Fix issue when skipping a comment without a proceeding newline
+
 ## [2.2.0] - 2025-03-16
 
 -   Improve performance
