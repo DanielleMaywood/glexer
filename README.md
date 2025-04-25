@@ -1,5 +1,6 @@
 # glexer
 
+[![daily](https://github.com/DanielleMaywood/glexer/actions/workflows/test.yml/badge.svg?event=schedule)](https://github.com/DanielleMaywood/glexer/actions/workflows/test.yml)
 [![Package Version](https://img.shields.io/hexpm/v/glexer)](https://hex.pm/packages/glexer)
 [![Hex Docs](https://img.shields.io/badge/hex-docs-ffaff3)](https://hexdocs.pm/glexer/)
 
