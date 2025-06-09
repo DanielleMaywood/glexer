@@ -24,7 +24,7 @@ jobs:
     strategy:
       matrix:
         otp-version: ["26", "27", "28"]
-        gleam-version: ["1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "nightly"]
+        gleam-version: ["1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "nightly"]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -40,7 +40,7 @@ jobs:
     strategy:
       matrix:
         node-version: ["20", "22", "24"]
-        gleam-version: ["1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "nightly"]
+        gleam-version: ["1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "nightly"]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -59,7 +59,7 @@ jobs:
     strategy:
       matrix:
         deno-version: ["v1.x", "v2.x"]
-        gleam-version: ["1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "nightly"]
+        gleam-version: ["1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "nightly"]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -78,7 +78,7 @@ jobs:
     strategy:
       matrix:
         bun-version: ["latest"]
-        gleam-version: ["1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "nightly"]
+        gleam-version: ["1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "nightly"]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
