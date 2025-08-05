@@ -24,13 +24,12 @@ jobs:
     strategy:
       matrix:
         otp-version: ["27", "28"]
-        gleam-version: ["1.9", "1.10", "1.11", "nightly"]
+        gleam-version: ["1.10", "1.11", "1.12"]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: erlef/setup-beam@v1
         with:
-          version-type: ${{ matrix.gleam-version == 'nightly' && 'strict' || 'loose' }}
           otp-version: ${{ matrix.otp-version }}
           gleam-version: ${{ matrix.gleam-version }}
       - run: gleam deps download
@@ -40,13 +39,12 @@ jobs:
     strategy:
       matrix:
         node-version: ["20", "22", "24"]
-        gleam-version: ["1.9", "1.10", "1.11", "nightly"]
+        gleam-version: ["1.10", "1.11", "1.12"]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: erlef/setup-beam@v1
         with:
-          version-type: ${{ matrix.gleam-version == 'nightly' && 'strict' || 'loose' }}
           otp-version: 28
           gleam-version: ${{ matrix.gleam-version }}
       - uses: actions/setup-node@v2
@@ -59,13 +57,12 @@ jobs:
     strategy:
       matrix:
         deno-version: ["v1.x", "v2.x"]
-        gleam-version: ["1.9", "1.10", "1.11", "nightly"]
+        gleam-version: ["1.10", "1.11", "1.12"]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: erlef/setup-beam@v1
         with:
-          version-type: ${{ matrix.gleam-version == 'nightly' && 'strict' || 'loose' }}
           otp-version: 28
           gleam-version: ${{ matrix.gleam-version }}
       - uses: denoland/setup-deno@v2
@@ -78,13 +75,12 @@ jobs:
     strategy:
       matrix:
         bun-version: ["latest"]
-        gleam-version: ["1.9", "1.10", "1.11", "nightly"]
+        gleam-version: ["1.10", "1.11", "1.12"]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: erlef/setup-beam@v1
         with:
-          version-type: ${{ matrix.gleam-version == 'nightly' && 'strict' || 'loose' }}
           otp-version: 28
           gleam-version: ${{ matrix.gleam-version }}
       - uses: oven-sh/setup-bun@v2
