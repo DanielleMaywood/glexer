@@ -1,6 +1,10 @@
 # Changelog
 
-## [Unreleased]
+## [2.3.0] - 2025-08-30
+
+-   Use `splitter` library to increase performance when lexing comments
+
+## [2.2.1] - 2025-03-18
 
 -   Fix issue when skipping a comment without a proceeding newline
 
