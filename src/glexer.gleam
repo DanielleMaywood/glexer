@@ -30,7 +30,12 @@ type LexerMode {
 }
 
 pub type Position {
-  Position(byte_offset: Int)
+  Position(
+    /// Despite being named 'byte_offset', this isn't actually a 'byte_offset'
+    /// on JavaScript. Strings on JavaScript are utf-16, so this is actually
+    /// more like a 'codeunit' offset.
+    byte_offset: Int,
+  )
 }
 
 pub fn new(source: String) -> Lexer {
@@ -366,7 +371,7 @@ fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
                 lexer,
                 token.UnexpectedGrapheme(grapheme),
                 source,
-                string.byte_size(grapheme),
+                length(grapheme),
               )
             }
           }
@@ -592,7 +597,7 @@ fn whitespace(
 fn skip_comment(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
   let #(prefix, suffix) = splitter.split_before(lexer.newlines, lexer.source)
 
-  let eaten = string.byte_size(prefix)
+  let eaten = length(prefix)
   let lexer = advance(lexer, suffix, eaten)
 
   next(lexer)
@@ -605,7 +610,7 @@ fn comment(
 ) -> #(Lexer, #(Token, Position)) {
   let #(prefix, suffix) = splitter.split_before(lexer.newlines, lexer.source)
 
-  let eaten = string.byte_size(prefix)
+  let eaten = length(prefix)
   let lexer = advance(lexer, suffix, eaten)
 
   let token = case kind {
@@ -774,7 +779,7 @@ fn lex_string(
           |> lex_string(start, slice_size + 1)
 
         Ok(#(grapheme, source)) -> {
-          let offset = 1 + string.byte_size(grapheme)
+          let offset = 1 + length(grapheme)
           advance(lexer, source, offset)
           |> lex_string(start, slice_size + offset)
         }
@@ -882,6 +887,11 @@ fn token(lexer: Lexer, token: Token, source: String, offset: Int) {
 // //////////////////// //
 // FFI String functions //
 // //////////////////// //
+
+@external(javascript, "./glexer.ffi.mjs", "string_length")
+fn length(string: String) -> Int {
+  string.byte_size(string)
+}
 
 /// > 🚨 Beware that this is tricking Gleam's type system! There's no guarantee
 /// > that taking a slice from an arbitrary byte index would result in a valid
