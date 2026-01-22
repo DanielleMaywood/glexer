@@ -552,10 +552,7 @@ fn check_for_nested_dot(
   lexer: Lexer,
 ) -> Result(#(Lexer, Option(#(Token, Position))), Nil) {
   case lexer.source {
-    ".." <> source -> {
-      let #(lexer, token) = token(lexer, token.DotDot, source, 2)
-      Ok(#(lexer, token))
-    }
+    ".." <> source -> Ok(token(lexer, token.DotDot, source, 2))
     "." <> source -> {
       case source {
         "0" <> _
@@ -572,10 +569,7 @@ fn check_for_nested_dot(
 
           Ok(#(Lexer(..lexer, mode: HasNestedDot), token))
         }
-        _ -> {
-          let #(lexer, token) = token(lexer, token.Dot, source, 1)
-          Ok(#(lexer, token))
-        }
+        _ -> Ok(token(lexer, token.Dot, source, 1))
       }
     }
 
