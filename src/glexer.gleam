@@ -1,5 +1,6 @@
 import gleam/int
 import gleam/list
+import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
 import glexer/token.{type Token}
@@ -65,8 +66,9 @@ pub fn lex(lexer: Lexer) -> List(#(Token, Position)) {
 
 fn do_lex(lexer: Lexer, tokens: List(#(Token, Position))) {
   case next(lexer) {
-    #(_lexer, #(token.EndOfFile, _)) -> tokens
-    #(lexer, token) -> do_lex(lexer, [token, ..tokens])
+    #(lexer, None) -> do_lex(lexer, tokens)
+    #(_lexer, Some(#(token.EndOfFile, _))) -> tokens
+    #(lexer, Some(token)) -> do_lex(lexer, [token, ..tokens])
   }
 }
 
@@ -76,27 +78,27 @@ type CommentKind {
   ModuleComment
 }
 
-fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
+fn next(lexer: Lexer) -> #(Lexer, Option(#(Token, Position))) {
   case lexer.mode {
     CheckForMinus ->
       case check_for_minus(lexer) {
-        Ok(#(lexer, token)) -> #(lexer, token)
-        Error(Nil) -> next(Lexer(..lexer, mode: Normal))
+        Ok(#(lexer, token)) -> #(lexer, Some(token))
+        Error(Nil) -> #(Lexer(..lexer, mode: Normal), None)
       }
 
     CheckForNestedDot ->
       case check_for_nested_dot(lexer) {
-        Ok(#(lexer, token)) -> #(lexer, token)
-        Error(Nil) -> next(Lexer(..lexer, mode: Normal))
+        Ok(#(lexer, token)) -> #(lexer, Some(token))
+        Error(Nil) -> #(Lexer(..lexer, mode: Normal), None)
       }
 
     CheckForNestedDotOrMinus ->
       case check_for_nested_dot(lexer) {
-        Ok(#(lexer, token)) -> #(lexer, token)
+        Ok(#(lexer, token)) -> #(lexer, Some(token))
         Error(Nil) ->
           case check_for_minus(lexer) {
-            Ok(#(lexer, token)) -> #(lexer, token)
-            Error(Nil) -> next(Lexer(..lexer, mode: Normal))
+            Ok(#(lexer, token)) -> #(lexer, Some(token))
+            Error(Nil) -> #(Lexer(..lexer, mode: Normal), None)
           }
       }
 
@@ -118,10 +120,10 @@ fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
             |> lex_digits(byte_offset, 1)
 
           let lexer = Lexer(..lexer, mode: CheckForNestedDot)
-          #(lexer, #(token.Int(int), Position(byte_offset:)))
+          #(lexer, Some(#(token.Int(int), Position(byte_offset:))))
         }
 
-        _ -> next(Lexer(..lexer, mode: Normal))
+        _ -> #(Lexer(..lexer, mode: Normal), None)
       }
 
     Normal ->
@@ -138,6 +140,7 @@ fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
             True ->
               advance(lexer, source, 4)
               |> comment(ModuleComment, lexer.byte_offset)
+              |> wrap_token
           }
 
         "///" <> source ->
@@ -146,6 +149,7 @@ fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
             True ->
               advance(lexer, source, 3)
               |> comment(DocComment, lexer.byte_offset)
+              |> wrap_token
           }
 
         "//" <> source ->
@@ -154,59 +158,66 @@ fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
             True ->
               advance(lexer, source, 2)
               |> comment(RegularComment, lexer.byte_offset)
+              |> wrap_token
           }
 
         // Groupings
-        "(" <> source -> token(lexer, token.LeftParen, source, 1)
-        ")" <> source -> token(lexer, token.RightParen, source, 1)
-        "{" <> source -> token(lexer, token.LeftBrace, source, 1)
-        "}" <> source -> token(lexer, token.RightBrace, source, 1)
-        "[" <> source -> token(lexer, token.LeftSquare, source, 1)
-        "]" <> source -> token(lexer, token.RightSquare, source, 1)
+        "(" <> source -> wrap_token(token(lexer, token.LeftParen, source, 1))
+        ")" <> source -> wrap_token(token(lexer, token.RightParen, source, 1))
+        "{" <> source -> wrap_token(token(lexer, token.LeftBrace, source, 1))
+        "}" <> source -> wrap_token(token(lexer, token.RightBrace, source, 1))
+        "[" <> source -> wrap_token(token(lexer, token.LeftSquare, source, 1))
+        "]" <> source -> wrap_token(token(lexer, token.RightSquare, source, 1))
 
         // Other Punctuation
-        "@" <> source -> token(lexer, token.At, source, 1)
-        ":" <> source -> token(lexer, token.Colon, source, 1)
-        "," <> source -> token(lexer, token.Comma, source, 1)
-        ".." <> source -> token(lexer, token.DotDot, source, 2)
-        "." <> source -> token(lexer, token.Dot, source, 1)
-        "#" <> source -> token(lexer, token.Hash, source, 1)
-        "!=" <> source -> token(lexer, token.NotEqual, source, 2)
-        "!" <> source -> token(lexer, token.Bang, source, 1)
-        "==" <> source -> token(lexer, token.EqualEqual, source, 2)
-        "=" <> source -> token(lexer, token.Equal, source, 1)
-        "|>" <> source -> token(lexer, token.Pipe, source, 2)
-        "||" <> source -> token(lexer, token.VBarVBar, source, 2)
-        "|" <> source -> token(lexer, token.VBar, source, 1)
-        "&&" <> source -> token(lexer, token.AmperAmper, source, 2)
-        "<<" <> source -> token(lexer, token.LessLess, source, 2)
-        ">>" <> source -> token(lexer, token.GreaterGreater, source, 2)
-        "<-" <> source -> token(lexer, token.LeftArrow, source, 2)
-        "->" <> source -> token(lexer, token.RightArrow, source, 2)
+        "@" <> source -> wrap_token(token(lexer, token.At, source, 1))
+        ":" <> source -> wrap_token(token(lexer, token.Colon, source, 1))
+        "," <> source -> wrap_token(token(lexer, token.Comma, source, 1))
+        ".." <> source -> wrap_token(token(lexer, token.DotDot, source, 2))
+        "." <> source -> wrap_token(token(lexer, token.Dot, source, 1))
+        "#" <> source -> wrap_token(token(lexer, token.Hash, source, 1))
+        "!=" <> source -> wrap_token(token(lexer, token.NotEqual, source, 2))
+        "!" <> source -> wrap_token(token(lexer, token.Bang, source, 1))
+        "==" <> source -> wrap_token(token(lexer, token.EqualEqual, source, 2))
+        "=" <> source -> wrap_token(token(lexer, token.Equal, source, 1))
+        "|>" <> source -> wrap_token(token(lexer, token.Pipe, source, 2))
+        "||" <> source -> wrap_token(token(lexer, token.VBarVBar, source, 2))
+        "|" <> source -> wrap_token(token(lexer, token.VBar, source, 1))
+        "&&" <> source -> wrap_token(token(lexer, token.AmperAmper, source, 2))
+        "<<" <> source -> wrap_token(token(lexer, token.LessLess, source, 2))
+        ">>" <> source ->
+          wrap_token(token(lexer, token.GreaterGreater, source, 2))
+        "<-" <> source -> wrap_token(token(lexer, token.LeftArrow, source, 2))
+        "->" <> source -> wrap_token(token(lexer, token.RightArrow, source, 2))
 
         // String Operators
-        "<>" <> source -> token(lexer, token.LessGreater, source, 2)
+        "<>" <> source -> wrap_token(token(lexer, token.LessGreater, source, 2))
 
         // Float Operators
-        "+." <> source -> token(lexer, token.PlusDot, source, 2)
-        "-." <> source -> token(lexer, token.MinusDot, source, 2)
-        "*." <> source -> token(lexer, token.StarDot, source, 2)
-        "/." <> source -> token(lexer, token.SlashDot, source, 2)
-        "<=." <> source -> token(lexer, token.LessEqualDot, source, 3)
-        "<." <> source -> token(lexer, token.LessDot, source, 2)
-        ">=." <> source -> token(lexer, token.GreaterEqualDot, source, 3)
-        ">." <> source -> token(lexer, token.GreaterDot, source, 2)
+        "+." <> source -> wrap_token(token(lexer, token.PlusDot, source, 2))
+        "-." <> source -> wrap_token(token(lexer, token.MinusDot, source, 2))
+        "*." <> source -> wrap_token(token(lexer, token.StarDot, source, 2))
+        "/." <> source -> wrap_token(token(lexer, token.SlashDot, source, 2))
+        "<=." <> source ->
+          wrap_token(token(lexer, token.LessEqualDot, source, 3))
+        "<." <> source -> wrap_token(token(lexer, token.LessDot, source, 2))
+        ">=." <> source ->
+          wrap_token(token(lexer, token.GreaterEqualDot, source, 3))
+        ">." <> source -> wrap_token(token(lexer, token.GreaterDot, source, 2))
 
         // Binary/Octal/Hexadecimal
         "0b" <> source ->
           advance(lexer, source, 2)
           |> lex_binary(lexer.byte_offset, 2)
+          |> wrap_token
         "0o" <> source ->
           advance(lexer, source, 2)
           |> lex_octal(lexer.byte_offset, 2)
+          |> wrap_token
         "0x" <> source ->
           advance(lexer, source, 2)
           |> lex_hexadecimal(lexer.byte_offset, 2)
+          |> wrap_token
 
         // Decimal Numbers
         "0" <> source
@@ -221,6 +232,7 @@ fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
         | "9" <> source -> {
           advance(lexer, source, 1)
           |> lex_number(LexInt, lexer.byte_offset, 1)
+          |> wrap_token
         }
 
         "-0" <> source
@@ -235,23 +247,26 @@ fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
         | "-9" <> source -> {
           advance(lexer, source, 2)
           |> lex_number(LexInt, lexer.byte_offset, 2)
+          |> wrap_token
         }
 
         // Int Operators
-        "+" <> source -> token(lexer, token.Plus, source, 1)
-        "-" <> source -> token(lexer, token.Minus, source, 1)
-        "*" <> source -> token(lexer, token.Star, source, 1)
-        "/" <> source -> token(lexer, token.Slash, source, 1)
-        "<=" <> source -> token(lexer, token.LessEqual, source, 2)
-        "<" <> source -> token(lexer, token.Less, source, 1)
-        ">=" <> source -> token(lexer, token.GreaterEqual, source, 2)
-        ">" <> source -> token(lexer, token.Greater, source, 1)
-        "%" <> source -> token(lexer, token.Percent, source, 1)
+        "+" <> source -> wrap_token(token(lexer, token.Plus, source, 1))
+        "-" <> source -> wrap_token(token(lexer, token.Minus, source, 1))
+        "*" <> source -> wrap_token(token(lexer, token.Star, source, 1))
+        "/" <> source -> wrap_token(token(lexer, token.Slash, source, 1))
+        "<=" <> source -> wrap_token(token(lexer, token.LessEqual, source, 2))
+        "<" <> source -> wrap_token(token(lexer, token.Less, source, 1))
+        ">=" <> source ->
+          wrap_token(token(lexer, token.GreaterEqual, source, 2))
+        ">" <> source -> wrap_token(token(lexer, token.Greater, source, 1))
+        "%" <> source -> wrap_token(token(lexer, token.Percent, source, 1))
 
         // Strings
         "\"" <> source ->
           advance(lexer, source, 1)
           |> lex_string(lexer.byte_offset, 0)
+          |> wrap_token
 
         // Discard
         "_" <> source -> {
@@ -260,7 +275,7 @@ fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
             advance(lexer, source, 1)
             |> lex_lowercase_name(byte_offset + 1, 0)
 
-          #(lexer, #(token.DiscardName(name), Position(byte_offset:)))
+          #(lexer, Some(#(token.DiscardName(name), Position(byte_offset:))))
         }
 
         // Keywords & Literals (Lowercase)
@@ -323,7 +338,7 @@ fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
 
           let lexer = Lexer(..lexer, mode: CheckForNestedDotOrMinus)
 
-          #(lexer, #(token, Position(byte_offset:)))
+          #(lexer, Some(#(token, Position(byte_offset:))))
         }
 
         // Uppercase Name
@@ -358,21 +373,24 @@ fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
             advance(lexer, source, 1)
             |> lex_uppercase_name(byte_offset, 1)
 
-          #(lexer, #(token.UpperName(name), Position(byte_offset:)))
+          #(lexer, Some(#(token.UpperName(name), Position(byte_offset:))))
         }
 
         _ ->
           case string.pop_grapheme(lexer.source) {
             // We've hit the end of the file
-            Error(_) -> #(lexer, #(token.EndOfFile, Position(lexer.byte_offset)))
+            Error(_) -> #(
+              lexer,
+              Some(#(token.EndOfFile, Position(lexer.byte_offset))),
+            )
             // This grapheme was unexpected
             Ok(#(grapheme, source)) -> {
-              token(
+              wrap_token(token(
                 lexer,
                 token.UnexpectedGrapheme(grapheme),
                 source,
                 length(grapheme),
-              )
+              ))
             }
           }
       }
@@ -574,7 +592,7 @@ fn whitespace(
   lexer: Lexer,
   start: Int,
   slice_size: Int,
-) -> #(Lexer, #(Token, Position)) {
+) -> #(Lexer, Option(#(Token, Position))) {
   case lexer.source {
     " " <> source | "\t" <> source | "\n" <> source | "\r" <> source ->
       advance(lexer, source, 1)
@@ -582,25 +600,32 @@ fn whitespace(
 
     _ ->
       case lexer.preserve_whitespace {
-        False -> next(lexer)
+        False -> #(lexer, None)
         True -> {
           let content = slice_bytes(lexer.original_source, start, slice_size)
-          #(lexer, #(token.Space(content), Position(byte_offset: start)))
+          #(lexer, Some(#(token.Space(content), Position(byte_offset: start))))
         }
       }
   }
 }
 
-/// Ignores the rest of the line until it finds a newline, and returns the next
-/// token.
+/// Ignores the rest of the line until it finds a newline, and signals the
+/// caller to continue lexing.
 ///
-fn skip_comment(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
+fn skip_comment(lexer: Lexer) -> #(Lexer, Option(#(Token, Position))) {
   let #(prefix, suffix) = splitter.split_before(lexer.newlines, lexer.source)
 
   let eaten = length(prefix)
   let lexer = advance(lexer, suffix, eaten)
 
-  next(lexer)
+  #(lexer, None)
+}
+
+fn wrap_token(
+  result: #(Lexer, #(Token, Position)),
+) -> #(Lexer, Option(#(Token, Position))) {
+  let #(lexer, token) = result
+  #(lexer, Some(token))
 }
 
 fn comment(
