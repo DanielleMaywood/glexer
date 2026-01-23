@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.3.1] - 2026-01-23
+
+-   Fixed a stack overflow when running on the V8 JavaScript engine
+
 ## [2.3.0] - 2025-08-30
 
 -   Use `splitter` library to increase performance when lexing comments
