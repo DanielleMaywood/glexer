@@ -1,5 +1,6 @@
 import gleam/int
 import gleam/list
+import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
 import glexer/token.{type Token}
@@ -65,8 +66,9 @@ pub fn lex(lexer: Lexer) -> List(#(Token, Position)) {
 
 fn do_lex(lexer: Lexer, tokens: List(#(Token, Position))) {
   case next(lexer) {
-    #(_lexer, #(token.EndOfFile, _)) -> tokens
-    #(lexer, token) -> do_lex(lexer, [token, ..tokens])
+    #(lexer, None) -> do_lex(lexer, tokens)
+    #(_lexer, Some(#(token.EndOfFile, _))) -> tokens
+    #(lexer, Some(token)) -> do_lex(lexer, [token, ..tokens])
   }
 }
 
@@ -76,27 +78,27 @@ type CommentKind {
   ModuleComment
 }
 
-fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
+fn next(lexer: Lexer) -> #(Lexer, Option(#(Token, Position))) {
   case lexer.mode {
     CheckForMinus ->
       case check_for_minus(lexer) {
-        Ok(#(lexer, token)) -> #(lexer, token)
-        Error(Nil) -> next(Lexer(..lexer, mode: Normal))
+        Ok(result) -> result
+        Error(Nil) -> #(Lexer(..lexer, mode: Normal), None)
       }
 
     CheckForNestedDot ->
       case check_for_nested_dot(lexer) {
-        Ok(#(lexer, token)) -> #(lexer, token)
-        Error(Nil) -> next(Lexer(..lexer, mode: Normal))
+        Ok(result) -> result
+        Error(Nil) -> #(Lexer(..lexer, mode: Normal), None)
       }
 
     CheckForNestedDotOrMinus ->
       case check_for_nested_dot(lexer) {
-        Ok(#(lexer, token)) -> #(lexer, token)
+        Ok(result) -> result
         Error(Nil) ->
           case check_for_minus(lexer) {
-            Ok(#(lexer, token)) -> #(lexer, token)
-            Error(Nil) -> next(Lexer(..lexer, mode: Normal))
+            Ok(result) -> result
+            Error(Nil) -> #(Lexer(..lexer, mode: Normal), None)
           }
       }
 
@@ -118,10 +120,10 @@ fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
             |> lex_digits(byte_offset, 1)
 
           let lexer = Lexer(..lexer, mode: CheckForNestedDot)
-          #(lexer, #(token.Int(int), Position(byte_offset:)))
+          #(lexer, Some(#(token.Int(int), Position(byte_offset:))))
         }
 
-        _ -> next(Lexer(..lexer, mode: Normal))
+        _ -> #(Lexer(..lexer, mode: Normal), None)
       }
 
     Normal ->
@@ -260,7 +262,7 @@ fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
             advance(lexer, source, 1)
             |> lex_lowercase_name(byte_offset + 1, 0)
 
-          #(lexer, #(token.DiscardName(name), Position(byte_offset:)))
+          #(lexer, Some(#(token.DiscardName(name), Position(byte_offset:))))
         }
 
         // Keywords & Literals (Lowercase)
@@ -323,7 +325,7 @@ fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
 
           let lexer = Lexer(..lexer, mode: CheckForNestedDotOrMinus)
 
-          #(lexer, #(token, Position(byte_offset:)))
+          #(lexer, Some(#(token, Position(byte_offset:))))
         }
 
         // Uppercase Name
@@ -358,13 +360,16 @@ fn next(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
             advance(lexer, source, 1)
             |> lex_uppercase_name(byte_offset, 1)
 
-          #(lexer, #(token.UpperName(name), Position(byte_offset:)))
+          #(lexer, Some(#(token.UpperName(name), Position(byte_offset:))))
         }
 
         _ ->
           case string.pop_grapheme(lexer.source) {
             // We've hit the end of the file
-            Error(_) -> #(lexer, #(token.EndOfFile, Position(lexer.byte_offset)))
+            Error(_) -> #(
+              lexer,
+              Some(#(token.EndOfFile, Position(lexer.byte_offset))),
+            )
             // This grapheme was unexpected
             Ok(#(grapheme, source)) -> {
               token(
@@ -529,7 +534,9 @@ fn lex_uppercase_name(
   }
 }
 
-fn check_for_minus(lexer: Lexer) -> Result(#(Lexer, #(Token, Position)), Nil) {
+fn check_for_minus(
+  lexer: Lexer,
+) -> Result(#(Lexer, Option(#(Token, Position))), Nil) {
   case lexer.source {
     "-" <> source -> {
       let #(lexer, token) = token(lexer, token.Minus, source, 1)
@@ -543,7 +550,7 @@ fn check_for_minus(lexer: Lexer) -> Result(#(Lexer, #(Token, Position)), Nil) {
 
 fn check_for_nested_dot(
   lexer: Lexer,
-) -> Result(#(Lexer, #(Token, Position)), Nil) {
+) -> Result(#(Lexer, Option(#(Token, Position))), Nil) {
   case lexer.source {
     ".." <> source -> Ok(token(lexer, token.DotDot, source, 2))
     "." <> source -> {
@@ -574,7 +581,7 @@ fn whitespace(
   lexer: Lexer,
   start: Int,
   slice_size: Int,
-) -> #(Lexer, #(Token, Position)) {
+) -> #(Lexer, Option(#(Token, Position))) {
   case lexer.source {
     " " <> source | "\t" <> source | "\n" <> source | "\r" <> source ->
       advance(lexer, source, 1)
@@ -582,32 +589,39 @@ fn whitespace(
 
     _ ->
       case lexer.preserve_whitespace {
-        False -> next(lexer)
+        False -> #(lexer, None)
         True -> {
           let content = slice_bytes(lexer.original_source, start, slice_size)
-          #(lexer, #(token.Space(content), Position(byte_offset: start)))
+          #(lexer, Some(#(token.Space(content), Position(byte_offset: start))))
         }
       }
   }
 }
 
-/// Ignores the rest of the line until it finds a newline, and returns the next
-/// token.
+/// Ignores the rest of the line until it finds a newline, and signals the
+/// caller to continue lexing.
 ///
-fn skip_comment(lexer: Lexer) -> #(Lexer, #(Token, Position)) {
+fn skip_comment(lexer: Lexer) -> #(Lexer, Option(#(Token, Position))) {
   let #(prefix, suffix) = splitter.split_before(lexer.newlines, lexer.source)
 
   let eaten = length(prefix)
   let lexer = advance(lexer, suffix, eaten)
 
-  next(lexer)
+  #(lexer, None)
+}
+
+fn some_token(
+  result: #(Lexer, #(Token, Position)),
+) -> #(Lexer, Option(#(Token, Position))) {
+  let #(lexer, token) = result
+  #(lexer, Some(token))
 }
 
 fn comment(
   lexer: Lexer,
   kind: CommentKind,
   start: Int,
-) -> #(Lexer, #(Token, Position)) {
+) -> #(Lexer, Option(#(Token, Position))) {
   let #(prefix, suffix) = splitter.split_before(lexer.newlines, lexer.source)
 
   let eaten = length(prefix)
@@ -619,14 +633,14 @@ fn comment(
     RegularComment -> token.CommentNormal(prefix)
   }
 
-  #(lexer, #(token, Position(byte_offset: start)))
+  #(lexer, Some(#(token, Position(byte_offset: start))))
 }
 
 fn lex_binary(
   lexer: Lexer,
   start: Int,
   slice_size: Int,
-) -> #(Lexer, #(Token, Position)) {
+) -> #(Lexer, Option(#(Token, Position))) {
   case lexer.source {
     "_" <> source | "0" <> source | "1" <> source ->
       advance(lexer, source, 1)
@@ -634,7 +648,7 @@ fn lex_binary(
 
     _ -> {
       let content = slice_bytes(lexer.original_source, start, slice_size)
-      #(lexer, #(token.Int(content), Position(byte_offset: start)))
+      #(lexer, Some(#(token.Int(content), Position(byte_offset: start))))
     }
   }
 }
@@ -643,7 +657,7 @@ fn lex_octal(
   lexer: Lexer,
   start: Int,
   slice_size: Int,
-) -> #(Lexer, #(Token, Position)) {
+) -> #(Lexer, Option(#(Token, Position))) {
   case lexer.source {
     "_" <> source
     | "0" <> source
@@ -659,7 +673,7 @@ fn lex_octal(
 
     _ -> {
       let content = slice_bytes(lexer.original_source, start, slice_size)
-      #(lexer, #(token.Int(content), Position(byte_offset: start)))
+      #(lexer, Some(#(token.Int(content), Position(byte_offset: start))))
     }
   }
 }
@@ -668,7 +682,7 @@ fn lex_hexadecimal(
   lexer: Lexer,
   start: Int,
   slice_size: Int,
-) -> #(Lexer, #(Token, Position)) {
+) -> #(Lexer, Option(#(Token, Position))) {
   case lexer.source {
     "_" <> source
     | "0" <> source
@@ -698,7 +712,7 @@ fn lex_hexadecimal(
 
     _ -> {
       let content = slice_bytes(lexer.original_source, start, slice_size)
-      #(lexer, #(token.Int(content), Position(byte_offset: start)))
+      #(lexer, Some(#(token.Int(content), Position(byte_offset: start))))
     }
   }
 }
@@ -714,7 +728,7 @@ fn lex_number(
   mode: LexNumberMode,
   start: Int,
   slice_size: Int,
-) -> #(Lexer, #(Token, Position)) {
+) -> #(Lexer, Option(#(Token, Position))) {
   case lexer.source, mode {
     "_" <> source, _
     | "0" <> source, _
@@ -749,13 +763,13 @@ fn lex_number(
     _, LexInt -> {
       let lexer = Lexer(..lexer, mode: CheckForMinus)
       let content = slice_bytes(lexer.original_source, start, slice_size)
-      #(lexer, #(token.Int(content), Position(byte_offset: start)))
+      #(lexer, Some(#(token.Int(content), Position(byte_offset: start))))
     }
 
     _, LexFloat | _, LexFloatExponent -> {
       let lexer = Lexer(..lexer, mode: CheckForMinus)
       let content = slice_bytes(lexer.original_source, start, slice_size)
-      #(lexer, #(token.Float(content), Position(byte_offset: start)))
+      #(lexer, Some(#(token.Float(content), Position(byte_offset: start))))
     }
   }
 }
@@ -764,12 +778,13 @@ fn lex_string(
   lexer: Lexer,
   start: Int,
   slice_size: Int,
-) -> #(Lexer, #(Token, Position)) {
+) -> #(Lexer, Option(#(Token, Position))) {
   case lexer.source {
     "\"" <> source -> {
       let content = slice_bytes(lexer.original_source, start + 1, slice_size)
       #(token.String(content), Position(byte_offset: start))
       |> advanced(lexer, source, 1)
+      |> some_token
     }
 
     "\\" <> source ->
@@ -787,10 +802,10 @@ fn lex_string(
 
     "" -> {
       let content = slice_bytes(lexer.original_source, start + 1, slice_size)
-      #(lexer, #(
-        token.UnterminatedString(content),
-        Position(byte_offset: start),
-      ))
+      #(
+        lexer,
+        Some(#(token.UnterminatedString(content), Position(byte_offset: start))),
+      )
     }
 
     _ ->
@@ -879,9 +894,15 @@ fn advanced(
   #(advance(lexer, source, offset), token)
 }
 
-fn token(lexer: Lexer, token: Token, source: String, offset: Int) {
+fn token(
+  lexer: Lexer,
+  token: Token,
+  source: String,
+  offset: Int,
+) -> #(Lexer, Option(#(Token, Position))) {
   #(token, Position(byte_offset: lexer.byte_offset))
   |> advanced(lexer, source, offset)
+  |> some_token
 }
 
 // //////////////////// //
