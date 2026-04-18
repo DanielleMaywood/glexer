@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+-   Updated the `gleam_stdlib` version constraint to allow using `v1.0.0`
+
 ## [2.3.1] - 2026-01-23
 
 -   Fixed a stack overflow when running on the V8 JavaScript engine
