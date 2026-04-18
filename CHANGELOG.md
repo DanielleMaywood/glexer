@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## [2.4.0] - 2026-04-18
 
 -   Updated the `gleam_stdlib` version constraint to allow using `v1.0.0`
 
