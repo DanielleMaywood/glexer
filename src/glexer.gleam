@@ -160,7 +160,10 @@ fn next(lexer: Lexer) -> #(Lexer, Option(#(Token, Position))) {
 
         // Groupings
         "(" <> source -> token(lexer, token.LeftParen, source, 1)
-        ")" <> source -> token(lexer, token.RightParen, source, 1)
+        ")" <> source -> {
+          let #(lexer, tok) = token(lexer, token.RightParen, source, 1)
+          #(Lexer(..lexer, mode: CheckForNestedDot), tok)
+        }
         "{" <> source -> token(lexer, token.LeftBrace, source, 1)
         "}" <> source -> token(lexer, token.RightBrace, source, 1)
         "[" <> source -> token(lexer, token.LeftSquare, source, 1)

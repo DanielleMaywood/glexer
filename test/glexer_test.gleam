@@ -410,6 +410,36 @@ pub fn nested_tuple_access_test() {
   ])
 }
 
+pub fn nested_tuple_access_after_call_test() {
+  "wibble().12.3"
+  |> glexer.new()
+  |> glexer.discard_whitespace()
+  |> glexer.lex()
+  |> should.equal([
+    #(token.Name("wibble"), Position(0)),
+    #(token.LeftParen, Position(6)),
+    #(token.RightParen, Position(7)),
+    #(token.Dot, Position(8)),
+    #(token.Int("12"), Position(9)),
+    #(token.Dot, Position(11)),
+    #(token.Int("3"), Position(12)),
+  ])
+}
+
+pub fn float_after_call_test() {
+  "wibble() +. 0.5"
+  |> glexer.new()
+  |> glexer.discard_whitespace()
+  |> glexer.lex()
+  |> should.equal([
+    #(token.Name("wibble"), Position(0)),
+    #(token.LeftParen, Position(6)),
+    #(token.RightParen, Position(7)),
+    #(token.PlusDot, Position(9)),
+    #(token.Float("0.5"), Position(12)),
+  ])
+}
+
 pub fn whitespace_preservation_test() {
   "
 pub fn add(lhs: Int, rhs: Int) -> Int {
