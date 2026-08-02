@@ -4,6 +4,7 @@
 
 - Update the lexer to allow lexing negative binary, octal, and hexadecimal ints
 - Update the lexer to allow nested tuple access after arbitrary expressions
+- Update the lexer to allow `_` in tuple access
 
 ## [2.4.0] - 2026-04-18
 
@@ -60,8 +61,7 @@
 
 ### Added
 
-- Support for binary, octal and hexadecimal ints, and scientific notation
-  floats.
+- Support for binary, octal and hexadecimal ints, and scientific notation floats.
 
 ### Changed
 
