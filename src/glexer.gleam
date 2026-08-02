@@ -171,7 +171,11 @@ fn next(lexer: Lexer) -> #(Lexer, Option(#(Token, Position))) {
         ":" <> source -> token(lexer, token.Colon, source, 1)
         "," <> source -> token(lexer, token.Comma, source, 1)
         ".." <> source -> token(lexer, token.DotDot, source, 2)
-        "." <> source -> token(lexer, token.Dot, source, 1)
+        "." <> source -> {
+          let #(lexer, token) = token(lexer, token.Dot, source, 1)
+
+          #(Lexer(..lexer, mode: HasNestedDot), token)
+        }
         "#" <> source -> token(lexer, token.Hash, source, 1)
         "!=" <> source -> token(lexer, token.NotEqual, source, 2)
         "!" <> source -> token(lexer, token.Bang, source, 1)
