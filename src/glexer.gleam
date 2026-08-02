@@ -400,7 +400,8 @@ fn next(lexer: Lexer) -> #(Lexer, Option(#(Token, Position))) {
 
 fn lex_digits(lexer: Lexer, start: Int, slice_size: Int) -> #(Lexer, String) {
   case lexer.source {
-    "0" <> source
+    "_" <> source
+    | "0" <> source
     | "1" <> source
     | "2" <> source
     | "3" <> source

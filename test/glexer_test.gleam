@@ -532,3 +532,14 @@ pub fn github_issue_33_test() {
     #(token.Int("0"), Position(28)),
   ])
 }
+
+pub fn github_issue_35_test() {
+  "wibble.1_0"
+  |> glexer.new()
+  |> glexer.lex()
+  |> should.equal([
+    #(token.Name("wibble"), Position(0)),
+    #(token.Dot, Position(6)),
+    #(token.Int("1_0"), Position(7)),
+  ])
+}
