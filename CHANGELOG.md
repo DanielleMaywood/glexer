@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## [2.5.0] - 2026-08-03
 
 - Update the lexer to allow lexing negative binary, octal, and hexadecimal ints
 - Update the lexer to allow nested tuple access after arbitrary expressions
