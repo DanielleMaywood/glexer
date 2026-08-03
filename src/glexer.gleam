@@ -25,8 +25,6 @@ pub opaque type Lexer {
 type LexerMode {
   Normal
   CheckForMinus
-  CheckForNestedDot
-  CheckForNestedDotOrMinus
   HasNestedDot
 }
 
@@ -86,22 +84,6 @@ fn next(lexer: Lexer) -> #(Lexer, Option(#(Token, Position))) {
         Error(Nil) -> #(Lexer(..lexer, mode: Normal), None)
       }
 
-    CheckForNestedDot ->
-      case check_for_nested_dot(lexer) {
-        Ok(result) -> result
-        Error(Nil) -> #(Lexer(..lexer, mode: Normal), None)
-      }
-
-    CheckForNestedDotOrMinus ->
-      case check_for_nested_dot(lexer) {
-        Ok(result) -> result
-        Error(Nil) ->
-          case check_for_minus(lexer) {
-            Ok(result) -> result
-            Error(Nil) -> #(Lexer(..lexer, mode: Normal), None)
-          }
-      }
-
     HasNestedDot ->
       case lexer.source {
         "0" <> source
@@ -119,7 +101,7 @@ fn next(lexer: Lexer) -> #(Lexer, Option(#(Token, Position))) {
             advance(lexer, source, 1)
             |> lex_digits(byte_offset, 1)
 
-          let lexer = Lexer(..lexer, mode: CheckForNestedDot)
+          let lexer = Lexer(..lexer, mode: HasNestedDot)
           #(lexer, Some(#(token.Int(int), Position(byte_offset:))))
         }
 
@@ -337,7 +319,7 @@ fn next(lexer: Lexer) -> #(Lexer, Option(#(Token, Position))) {
             _name -> token.Name(name)
           }
 
-          let lexer = Lexer(..lexer, mode: CheckForNestedDotOrMinus)
+          let lexer = Lexer(..lexer, mode: CheckForMinus)
 
           #(lexer, Some(#(token, Position(byte_offset:))))
         }
@@ -557,35 +539,6 @@ fn check_for_minus(
       let #(lexer, token) = token(lexer, token.Minus, source, 1)
 
       Ok(#(Lexer(..lexer, mode: Normal), token))
-    }
-
-    _ -> Error(Nil)
-  }
-}
-
-fn check_for_nested_dot(
-  lexer: Lexer,
-) -> Result(#(Lexer, Option(#(Token, Position))), Nil) {
-  case lexer.source {
-    ".." <> source -> Ok(token(lexer, token.DotDot, source, 2))
-    "." <> source -> {
-      case source {
-        "0" <> _
-        | "1" <> _
-        | "2" <> _
-        | "3" <> _
-        | "4" <> _
-        | "5" <> _
-        | "6" <> _
-        | "7" <> _
-        | "8" <> _
-        | "9" <> _ -> {
-          let #(lexer, token) = token(lexer, token.Dot, source, 1)
-
-          Ok(#(Lexer(..lexer, mode: HasNestedDot), token))
-        }
-        _ -> Ok(token(lexer, token.Dot, source, 1))
-      }
     }
 
     _ -> Error(Nil)
