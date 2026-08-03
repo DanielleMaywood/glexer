@@ -255,7 +255,9 @@ pub fn bad_float_test() {
   |> should.equal([
     #(token.Float("1.123"), Position(0)),
     #(token.Dot, Position(5)),
-    #(token.Float("4567.89"), Position(6)),
+    #(token.Int("4567"), Position(6)),
+    #(token.Dot, Position(10)),
+    #(token.Int("89"), Position(11)),
   ])
 }
 
@@ -502,4 +504,42 @@ pub fn github_issue_36_test() {
   |> glexer.new
   |> glexer.lex
   |> should.equal([#(token.Int("-0b1101"), Position(0))])
+}
+
+pub fn github_issue_33_test() {
+  "wibble().0.0 + { wobble }.1.0"
+  |> glexer.new()
+  |> glexer.lex()
+  |> should.equal([
+    #(token.Name("wibble"), Position(0)),
+    #(token.LeftParen, Position(6)),
+    #(token.RightParen, Position(7)),
+    #(token.Dot, Position(8)),
+    #(token.Int("0"), Position(9)),
+    #(token.Dot, Position(10)),
+    #(token.Int("0"), Position(11)),
+    #(token.Space(" "), Position(12)),
+    #(token.Plus, Position(13)),
+    #(token.Space(" "), Position(14)),
+    #(token.LeftBrace, Position(15)),
+    #(token.Space(" "), Position(16)),
+    #(token.Name("wobble"), Position(17)),
+    #(token.Space(" "), Position(23)),
+    #(token.RightBrace, Position(24)),
+    #(token.Dot, Position(25)),
+    #(token.Int("1"), Position(26)),
+    #(token.Dot, Position(27)),
+    #(token.Int("0"), Position(28)),
+  ])
+}
+
+pub fn github_issue_35_test() {
+  "wibble.1_0"
+  |> glexer.new()
+  |> glexer.lex()
+  |> should.equal([
+    #(token.Name("wibble"), Position(0)),
+    #(token.Dot, Position(6)),
+    #(token.Int("1_0"), Position(7)),
+  ])
 }

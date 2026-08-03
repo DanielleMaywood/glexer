@@ -3,84 +3,85 @@
 ## Unreleased
 
 - Update the lexer to allow lexing negative binary, octal, and hexadecimal ints
+- Update the lexer to allow nested tuple access after arbitrary expressions
+- Update the lexer to allow `_` in tuple access
 
 ## [2.4.0] - 2026-04-18
 
--   Updated the `gleam_stdlib` version constraint to allow using `v1.0.0`
+- Updated the `gleam_stdlib` version constraint to allow using `v1.0.0`
 
 ## [2.3.1] - 2026-01-23
 
--   Fixed a stack overflow when running on the V8 JavaScript engine
+- Fixed a stack overflow when running on the V8 JavaScript engine
 
 ## [2.3.0] - 2025-08-30
 
--   Use `splitter` library to increase performance when lexing comments
+- Use `splitter` library to increase performance when lexing comments
 
 ## [2.2.1] - 2025-03-18
 
--   Fix issue when skipping a comment without a proceeding newline
+- Fix issue when skipping a comment without a proceeding newline
 
 ## [2.2.0] - 2025-03-16
 
--   Improve performance
+- Improve performance
 
 ## [1.0.1] - 2024-04-25
 
 ### Fixed
 
--   Support lexing lowercase hexadecimal
+- Support lexing lowercase hexadecimal
 
 ## [1.0.0] - 2024-04-13
 
 ### Changed
 
--   Updated minimum required Gleam version to v1.0.0
--   Named the `byte_offset` field in `Position`
+- Updated minimum required Gleam version to v1.0.0
+- Named the `byte_offset` field in `Position`
 
 ## [0.7.0]
 
 ### Fixed
 
--   Updated for Gleam v0.32.0.
+- Updated for Gleam v0.32.0.
 
 ## [0.6.2]
 
 ### Fixed
 
--   Fixes broken support for hexadecimal ints were broken.
+- Fixes broken support for hexadecimal ints were broken.
 
 ## [0.6.1]
 
 ### Fixed
 
--   Fixes broken support for binary, octal and hexadecimal ints.
+- Fixes broken support for binary, octal and hexadecimal ints.
 
 ## [0.6.0]
 
 ### Added
 
--   Support for binary, octal and hexadecimal ints, and scientific notation
-    floats.
+- Support for binary, octal and hexadecimal ints, and scientific notation floats.
 
 ### Changed
 
--   Performance improvements
+- Performance improvements
 
 ## [0.5.0]
 
 ### Added
 
--   Support for the `@` tokens.
--   Support for unexpected graphemes that are not valid tokens.
+- Support for the `@` tokens.
+- Support for unexpected graphemes that are not valid tokens.
 
 ## [0.4.2]
 
 ### Added
 
--   Support for snake case names (#5)
+- Support for snake case names (#5)
 
 ## [0.4.0] - 2023-05-18
 
 ### Added
 
--   Basic float support (#4)
+- Basic float support (#4)
