@@ -101,7 +101,7 @@ fn next(lexer: Lexer) -> #(Lexer, Option(#(Token, Position))) {
             advance(lexer, source, 1)
             |> lex_digits(byte_offset, 1)
 
-          let lexer = Lexer(..lexer, mode: HasNestedDot)
+          let lexer = Lexer(..lexer, mode: Normal)
           #(lexer, Some(#(token.Int(int), Position(byte_offset:))))
         }
 
