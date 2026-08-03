@@ -15,7 +15,7 @@
     perSystem = { pkgs, system, ... }: let
       buildPackages = [
         pkgs.gleam
-        pkgs.erlang_27
+        pkgs.beam27Packages.erlang
         pkgs.nodejs_22
       ];
 
