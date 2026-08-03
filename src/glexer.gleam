@@ -210,6 +210,16 @@ fn next(lexer: Lexer) -> #(Lexer, Option(#(Token, Position))) {
           advance(lexer, source, 2)
           |> lex_hexadecimal(lexer.byte_offset, 2)
 
+        "-0b" <> source ->
+          advance(lexer, source, 3)
+          |> lex_binary(lexer.byte_offset, 3)
+        "-0o" <> source ->
+          advance(lexer, source, 3)
+          |> lex_octal(lexer.byte_offset, 3)
+        "-0x" <> source ->
+          advance(lexer, source, 3)
+          |> lex_hexadecimal(lexer.byte_offset, 3)
+
         // Decimal Numbers
         "0" <> source
         | "1" <> source

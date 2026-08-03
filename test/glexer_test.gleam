@@ -486,3 +486,20 @@ pub fn github_issue_25_test() {
   |> glexer.discard_comments
   |> glexer.lex()
 }
+
+pub fn github_issue_36_test() {
+  "-0x123abc"
+  |> glexer.new
+  |> glexer.lex
+  |> should.equal([#(token.Int("-0x123abc"), Position(0))])
+
+  "-0o123"
+  |> glexer.new
+  |> glexer.lex
+  |> should.equal([#(token.Int("-0o123"), Position(0))])
+
+  "-0b1101"
+  |> glexer.new
+  |> glexer.lex
+  |> should.equal([#(token.Int("-0b1101"), Position(0))])
+}
